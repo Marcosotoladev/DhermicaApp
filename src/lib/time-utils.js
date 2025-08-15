@@ -220,3 +220,27 @@ export function isFuture(date) {
     return false
   }
 }
+
+/**
+ * Formatea duración en minutos a formato legible
+ * @param {number} minutes - Duración en minutos
+ * @returns {string} Duración formateada (ej: "1h 30min", "45min", "2h")
+ */
+export function formatDuration(minutes) {
+  if (!minutes || typeof minutes !== 'number' || isNaN(minutes)) {
+    return '0 min'
+  }
+  
+  if (minutes < 60) {
+    return `${minutes} min`
+  }
+  
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  
+  if (remainingMinutes === 0) {
+    return `${hours}h`
+  }
+  
+  return `${hours}h ${remainingMinutes}min`
+}

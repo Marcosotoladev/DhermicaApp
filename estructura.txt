@@ -1,0 +1,62 @@
+find . -type f \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" -o -name "*.json" -o -name "*.css" -o -name "*.md" \) \
+  ! -path "./node_modules/*" \
+  ! -path "./.next/*" \
+  ! -path "./.git/*" \
+  | sort > estructura.txt
+
+
+
+
+./components.json
+./jsconfig.json
+./package.json
+./package-lock.json
+./README.md
+./src/app/(auth)/login/page.js
+./src/app/(auth)/register/page.js
+./src/app/admin/appointments/page.js
+./src/app/admin/clients/page.js
+./src/app/admin/dashboard/page.js
+./src/app/admin/professionals/page.js
+./src/app/admin/treatments/page.js
+./src/app/client/appointments/page.js
+./src/app/client/dashboard/page.js
+./src/app/client/history/page.js
+./src/app/client/profile/page.js
+./src/app/globals.css
+./src/app/layout.js
+./src/app/page.js
+./src/components/custom/AppointmentForm.js
+./src/components/custom/ClientSearch.js
+./src/components/custom/TimeSlotPicker.js
+./src/components/forms/appointment-form.js
+./src/components/forms/client-search.js
+./src/components/forms/login-form.js
+./src/components/forms/time-slot-picker.js
+./src/components/providers/auth-provider.js
+./src/components/ui/avatar.jsx
+./src/components/ui/badge.jsx
+./src/components/ui/birth-date-picker.jsx
+./src/components/ui/button.jsx
+./src/components/ui/calendar.jsx
+./src/components/ui/card.jsx
+./src/components/ui/checkbox.jsx
+./src/components/ui/dialog.jsx
+./src/components/ui/form.jsx
+./src/components/ui/input.jsx
+./src/components/ui/label.jsx
+./src/components/ui/popover.jsx
+./src/components/ui/scroll-area.jsx
+./src/components/ui/select.jsx
+./src/components/ui/separator.jsx
+./src/components/ui/skeleton.jsx
+./src/components/ui/sonner.jsx
+./src/components/ui/textarea.jsx
+./src/lib/data-structures.js
+./src/lib/firebase.js
+./src/lib/firebase-services.js
+./src/lib/time-utils.js
+./src/lib/utils.js
+./src/lib/validations.js
+./src/middleware.js
+./src/store/auth.js
