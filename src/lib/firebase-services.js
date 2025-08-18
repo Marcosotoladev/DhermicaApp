@@ -739,6 +739,38 @@ export const appointmentService = {
     }
   },
 
+
+  /**
+ * Obtener cita por ID con caché
+ */
+async getById(id, useCache = true) {
+  const cacheKey = `appointment:${id}`
+  
+  if (!useCache) {
+    cache.delete(cacheKey)
+  }
+
+  return optimizationUtils.withCache(
+    cacheKey,
+    async () => {
+      try {
+        const docRef = doc(db, 'appointments', id)
+        const docSnap = await getDoc(docRef)
+        
+        if (docSnap.exists()) {
+          return { id: docSnap.id, ...docSnap.data() }
+        } else {
+          return null
+        }
+      } catch (error) {
+        console.error('Error getting appointment:', error)
+        throw error
+      }
+    },
+    10 * 60 * 1000 // 10 minutos TTL
+  )
+},
+
   /**
    * Eliminar cita con invalidación de caché
    */

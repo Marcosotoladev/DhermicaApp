@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Calendar as CalendarIcon, List, ChevronLeft, ChevronRight, Clock, User, Briefcase, ArrowLeft, Edit, Trash2, Filter, X } from 'lucide-react'
+import { Plus, Calendar as CalendarIcon, List, ChevronLeft, ChevronRight, Clock, User, Briefcase, ArrowLeft, Edit, Trash2, Filter, X, Eye } from 'lucide-react'
 import { Button } from '../../../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card'
 import { Badge } from '../../../components/ui/badge'
@@ -434,8 +434,18 @@ export default function AppointmentsPage() {
                                         <Button
                                           variant="outline"
                                           size="sm"
-                                          onClick={() => router.push(`/admin/appointments/${appointment.id}/edit`)}
+                                          onClick={() => router.push(`/admin/appointments/${appointment.id}`)}
                                           className="px-2"
+                                          title="Ver detalles"
+                                        >
+                                          <Eye className="h-3 w-3" />
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => router.push(`/admin/appointments/editar/${appointment.id}`)}
+                                          className="px-2"
+                                          title="Editar cita"
                                         >
                                           <Edit className="h-3 w-3" />
                                         </Button>
@@ -444,6 +454,7 @@ export default function AppointmentsPage() {
                                           size="sm"
                                           onClick={() => handleDeleteAppointment(appointment.id)}
                                           className="text-destructive hover:text-destructive px-2"
+                                          title="Eliminar cita"
                                         >
                                           <Trash2 className="h-3 w-3" />
                                         </Button>
@@ -527,12 +538,22 @@ export default function AppointmentsPage() {
                                     )}
                                   </div>
                                 </div>
-                                <div className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-2 flex-shrink-0">
+                                <div className="flex space-x-1 flex-shrink-0">
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => router.push(`/admin/appointments/${appointment.id}/edit`)}
+                                    onClick={() => router.push(`/admin/appointments/${appointment.id}`)}
                                     className="px-2 sm:px-3"
+                                    title="Ver detalles"
+                                  >
+                                    <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => router.push(`/admin/appointments/editar/${appointment.id}`)}
+                                    className="px-2 sm:px-3"
+                                    title="Editar cita"
                                   >
                                     <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
                                   </Button>
@@ -541,6 +562,7 @@ export default function AppointmentsPage() {
                                     size="sm"
                                     onClick={() => handleDeleteAppointment(appointment.id)}
                                     className="text-destructive hover:text-destructive px-2 sm:px-3"
+                                    title="Eliminar cita"
                                   >
                                     <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
                                   </Button>

@@ -244,3 +244,17 @@ export function formatDuration(minutes) {
   
   return `${hours}h ${remainingMinutes}min`
 }
+
+/**
+ * Sumar minutos a una hora string
+ * @param {string} timeString - Hora en formato "HH:MM"
+ * @param {number} minutes - Minutos a agregar
+ * @returns {string} Nueva hora en formato "HH:MM"
+ */
+export function addMinutesToTime(timeString, minutes) {
+  const [hours, mins] = timeString.split(':').map(Number)
+  const totalMinutes = hours * 60 + mins + minutes
+  const newHours = Math.floor(totalMinutes / 60)
+  const newMins = totalMinutes % 60
+  return `${newHours.toString().padStart(2, '0')}:${newMins.toString().padStart(2, '0')}`
+}
