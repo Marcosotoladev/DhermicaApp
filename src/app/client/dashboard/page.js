@@ -22,19 +22,23 @@ import {
   Bell,
   Settings,
   CreditCard,
-  Gift
+  Gift,
+  MoreVertical,
+  TrendingUp,
+  Award,
+  Zap,
+  AlertCircle,
+  X
 } from 'lucide-react'
 import { Button } from '../../../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card'
 import { Badge } from '../../../components/ui/badge'
 import { Avatar, AvatarFallback } from '../../../components/ui/avatar'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '../../../components/ui/sheet'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../../components/ui/dropdown-menu'
 import { formatDate, formatTime, isToday, isFuture } from '../../../lib/time-utils'
 import { Skeleton } from '../../../components/ui/skeleton'
 
-/**
- * Dashboard móvil-first para cliente
- * Optimizado para experiencia móvil con diseño moderno
- */
 export default function ClientDashboard() {
   const router = useRouter()
   const [user, loading, error] = useAuthState(auth)
@@ -43,11 +47,14 @@ export default function ClientDashboard() {
   const [recentAppointments, setRecentAppointments] = useState([])
   const [loadingData, setLoadingData] = useState(true)
   const [dataError, setDataError] = useState('')
+  const [showStats, setShowStats] = useState(false)
   const [stats, setStats] = useState({
     totalAppointments: 0,
     nextAppointment: null,
     favoriteService: 'Ninguno',
-    memberSince: null
+    memberSince: null,
+    completedThisMonth: 0,
+    totalSpent: 0
   })
 
   useEffect(() => {
@@ -74,31 +81,34 @@ export default function ClientDashboard() {
         return
       }
 
-      // Cargar citas (con manejo de índice faltante)
+      // Cargar citas
       try {
         const appointmentsQuery = query(
           collection(db, 'appointments'),
           where('clientId', '==', user.uid),
           orderBy('date', 'asc'),
-          limit(10)
+          limit(20)
         )
 
         const appointmentsSnapshot = await getDocs(appointmentsQuery)
         const appointments = []
+        let totalSpent = 0
         
         for (const docSnap of appointmentsSnapshot.docs) {
           const appointmentData = docSnap.data()
           
           if (appointmentData.date && appointmentData.startTime) {
-            // Cargar información adicional del tratamiento y profesional
             let treatmentName = 'Tratamiento'
             let professionalName = 'Profesional'
+            let price = 0
             
             if (appointmentData.treatmentId) {
               try {
                 const treatmentDoc = await getDoc(doc(db, 'treatments', appointmentData.treatmentId))
                 if (treatmentDoc.exists()) {
-                  treatmentName = treatmentDoc.data().name
+                  const treatmentData = treatmentDoc.data()
+                  treatmentName = treatmentData.name
+                  price = treatmentData.basePrice || 0
                 }
               } catch (e) {
                 console.warn('Error cargando tratamiento:', e)
@@ -116,16 +126,21 @@ export default function ClientDashboard() {
               }
             }
 
+            const appointmentDate = appointmentData.date.toDate ? appointmentData.date.toDate() : new Date(appointmentData.date)
+            if (appointmentDate < new Date()) {
+              totalSpent += appointmentData.price || price
+            }
+
             appointments.push({
               id: docSnap.id,
               ...appointmentData,
               treatmentName,
-              professionalName
+              professionalName,
+              calculatedPrice: price
             })
           }
         }
 
-        // Separar citas futuras y pasadas
         const now = new Date()
         const upcoming = appointments.filter(apt => {
           try {
@@ -143,18 +158,34 @@ export default function ClientDashboard() {
           } catch {
             return false
           }
-        }).slice(0, 3)
+        }).slice(0, 5)
 
         setUpcomingAppointments(upcoming)
         setRecentAppointments(recent)
 
-        // Calcular estadísticas
         const nextAppointment = upcoming.length > 0 ? upcoming[0] : null
+        const thisMonth = new Date()
+        const completedThisMonth = recent.filter(apt => {
+          const aptDate = apt.date.toDate ? apt.date.toDate() : new Date(apt.date)
+          return aptDate.getMonth() === thisMonth.getMonth() && 
+                 aptDate.getFullYear() === thisMonth.getFullYear()
+        }).length
+
+        const treatmentCounts = {}
+        recent.forEach(apt => {
+          treatmentCounts[apt.treatmentName] = (treatmentCounts[apt.treatmentName] || 0) + 1
+        })
+        const favoriteService = Object.keys(treatmentCounts).length > 0 
+          ? Object.keys(treatmentCounts).reduce((a, b) => treatmentCounts[a] > treatmentCounts[b] ? a : b)
+          : 'Ninguno'
+
         setStats({
           totalAppointments: appointments.length,
           nextAppointment,
-          favoriteService: 'Limpieza Facial', // Placeholder
-          memberSince: clientData?.createdAt
+          favoriteService,
+          memberSince: clientData?.createdAt,
+          completedThisMonth,
+          totalSpent
         })
 
       } catch (appointmentsError) {
@@ -194,13 +225,27 @@ export default function ClientDashboard() {
     return clientData.name.split(' ')[0]
   }
 
+  const getMembershipDuration = () => {
+    if (!stats.memberSince) return 'Nuevo'
+    
+    const now = new Date()
+    const memberDate = stats.memberSince.toDate ? stats.memberSince.toDate() : new Date(stats.memberSince)
+    const months = Math.floor((now - memberDate) / (1000 * 60 * 60 * 24 * 30))
+    
+    if (months < 1) return 'Nuevo miembro'
+    if (months < 12) return `${months} ${months === 1 ? 'mes' : 'meses'}`
+    const years = Math.floor(months / 12)
+    return `${years} ${years === 1 ? 'año' : 'años'}`
+  }
+
   const quickActions = [
     {
       title: 'Agendar Cita',
       icon: Plus,
       href: '/treatments',
       color: 'bg-primary text-primary-foreground',
-      description: 'Nueva cita'
+      description: 'Nueva cita',
+      featured: true
     },
     {
       title: 'Mis Citas',
@@ -225,43 +270,44 @@ export default function ClientDashboard() {
     }
   ]
 
-  // Loading state
   if (loading || loadingData) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary/5 to-secondary/5 p-4">
-        <div className="space-y-6">
-          {/* Header skeleton */}
-          <div className="bg-card rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center space-x-4">
-              <Skeleton className="h-16 w-16 rounded-full" />
-              <div className="space-y-2">
-                <Skeleton className="h-6 w-32" />
-                <Skeleton className="h-4 w-48" />
+      <div className="min-h-screen bg-gradient-to-br from-primary/5 to-secondary/5">
+        <div className="border-b border-border/50 sticky top-0 z-10 backdrop-blur-sm bg-card/95">
+          <div className="p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <Skeleton className="h-12 w-12 rounded-full" />
+                <div className="space-y-2">
+                  <Skeleton className="h-5 w-32" />
+                  <Skeleton className="h-4 w-24" />
+                </div>
               </div>
+              <Skeleton className="h-8 w-8 rounded" />
             </div>
           </div>
-          
-          {/* Quick actions skeleton */}
+        </div>
+        
+        <div className="p-4 space-y-6">
           <div className="grid grid-cols-2 gap-4">
             {[...Array(4)].map((_, i) => (
               <Skeleton key={i} className="h-24 rounded-xl" />
             ))}
           </div>
-          
-          {/* Cards skeleton */}
           <Skeleton className="h-40 rounded-xl" />
           <Skeleton className="h-32 rounded-xl" />
+          <Skeleton className="h-48 rounded-xl" />
         </div>
       </div>
     )
   }
 
-  // Error state
   if (error || !user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary/5 to-secondary/5 p-4 flex items-center justify-center">
         <Card className="w-full max-w-md">
           <CardContent className="pt-6 text-center">
+            <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
             <p className="text-destructive mb-4">
               {error ? `Error: ${error.message}` : 'No autenticado'}
             </p>
@@ -277,72 +323,170 @@ export default function ClientDashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 to-secondary/5">
       
-      {/* Header con diseño móvil-first */}
-      <div className=" border-b border-border/50 sticky top-0 z-10 backdrop-blur-sm bg-card/95">
+      <div className="border-b border-border/50 sticky top-0 z-10 backdrop-blur-sm bg-card/95">
         <div className="p-4">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-3">
-              <Avatar className="h-12 w-12 border-2 border-primary/20">
+            <div className="flex items-center space-x-3 flex-1 min-w-0">
+              <Avatar className="h-12 w-12 border-2 border-primary/20 flex-shrink-0">
                 <AvatarFallback className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground text-sm font-medium">
                   {clientData?.name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
                 </AvatarFallback>
               </Avatar>
-              <div>
-                <h1 className="text-lg font-bold text-foreground">
+              <div className="min-w-0 flex-1">
+                <h1 className="text-lg font-bold text-foreground truncate">
                   {getGreeting()}, {getFirstName()}! 👋
                 </h1>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground truncate">
                   {clientData?.nickname ? `"${clientData.nickname}"` : 'Bienvenido a Dhermica'}
                 </p>
               </div>
             </div>
-            <Button variant="ghost" size="sm" onClick={handleSignOut}>
-              <LogOut className="h-4 w-4" />
-            </Button>
+            
+            <div className="flex items-center space-x-2 flex-shrink-0">
+              <Sheet open={showStats} onOpenChange={setShowStats}>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="sm" className="sm:hidden">
+                    <TrendingUp className="h-4 w-4" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="bottom" className="h-[70vh]">
+                  <SheetHeader>
+                    <SheetTitle>Mis Estadísticas</SheetTitle>
+                  </SheetHeader>
+                  <div className="space-y-6 mt-6">
+                    <div className="grid grid-cols-2 gap-4">
+                      <Card>
+                        <CardContent className="p-4 text-center">
+                          <Calendar className="h-6 w-6 text-primary mx-auto mb-2" />
+                          <p className="text-2xl font-bold">{stats.totalAppointments}</p>
+                          <p className="text-xs text-muted-foreground">Total citas</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4 text-center">
+                          <Award className="h-6 w-6 text-green-600 mx-auto mb-2" />
+                          <p className="text-2xl font-bold">{stats.completedThisMonth}</p>
+                          <p className="text-xs text-muted-foreground">Este mes</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4 text-center">
+                          <Heart className="h-6 w-6 text-rose-600 mx-auto mb-2" />
+                          <p className="text-lg font-bold">${stats.totalSpent.toLocaleString()}</p>
+                          <p className="text-xs text-muted-foreground">Total invertido</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4 text-center">
+                          <Star className="h-6 w-6 text-yellow-600 mx-auto mb-2" />
+                          <p className="text-lg font-bold">{getMembershipDuration()}</p>
+                          <p className="text-xs text-muted-foreground">Miembro desde</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                    
+                    <div>
+                      <h4 className="font-medium mb-3">Servicio Favorito</h4>
+                      <div className="p-4 bg-primary/10 rounded-lg text-center">
+                        <Heart className="h-8 w-8 text-primary mx-auto mb-2" />
+                        <p className="font-medium text-primary">{stats.favoriteService}</p>
+                      </div>
+                    </div>
+                  </div>
+                </SheetContent>
+              </Sheet>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem onClick={() => router.push('/client/profile')}>
+                    <User className="h-4 w-4 mr-2" />
+                    Mi perfil
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => router.push('/client/appointments')}>
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Mis citas
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => router.push('/client/history')}>
+                    <Clock className="h-4 w-4 mr-2" />
+                    Historial
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowStats(true)} className="sm:hidden">
+                    <TrendingUp className="h-4 w-4 mr-2" />
+                    Estadísticas
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Cerrar sesión
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
 
-          {/* Error banner */}
           {dataError && (
-            <div className="bg-orange-100 border border-orange-200 rounded-lg p-3 mb-4">
-              <p className="text-orange-800 text-sm">{dataError}</p>
+            <div className="bg-orange-100 border border-orange-200 rounded-lg p-3 mb-4 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <AlertCircle className="h-4 w-4 text-orange-600 flex-shrink-0" />
+                <p className="text-orange-800 text-sm">{dataError}</p>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setDataError('')}
+                className="text-orange-600 hover:text-orange-700"
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Contenido principal */}
       <div className="p-4 space-y-6">
         
-        {/* Próxima cita destacada */}
         {stats.nextAppointment && (
-          <Card className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground border-0">
-            <CardContent className="p-6">
+          <Card className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground border-0 overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-16 translate-x-16"></div>
+            <CardContent className="p-6 relative">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-primary-foreground/80 text-sm font-medium mb-1">
-                    Tu próxima cita
-                  </p>
-                  <h3 className="text-lg font-bold mb-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Badge variant="secondary" className="bg-white/20 text-primary-foreground border-0">
+                      Próxima cita
+                    </Badge>
+                    <Zap className="h-4 w-4" />
+                  </div>
+                  <h3 className="text-lg font-bold mb-2 truncate">
                     {stats.nextAppointment.treatmentName}
                   </h3>
-                  <div className="flex items-center space-x-4 text-sm text-primary-foreground/90">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-1 sm:space-y-0 text-sm text-primary-foreground/90">
                     <div className="flex items-center space-x-1">
-                      <Calendar className="h-4 w-4" />
-                      <span>
+                      <Calendar className="h-4 w-4 flex-shrink-0" />
+                      <span className="truncate">
                         {formatDate(stats.nextAppointment.date.toDate ? stats.nextAppointment.date.toDate() : stats.nextAppointment.date)}
                       </span>
                     </div>
                     <div className="flex items-center space-x-1">
-                      <Clock className="h-4 w-4" />
+                      <Clock className="h-4 w-4 flex-shrink-0" />
                       <span>{stats.nextAppointment.startTime}</span>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      <User className="h-4 w-4 flex-shrink-0" />
+                      <span className="truncate">{stats.nextAppointment.professionalName}</span>
                     </div>
                   </div>
                 </div>
-                <div className="text-right">
+                <div className="text-right flex-shrink-0 ml-4">
                   <Button 
                     variant="secondary" 
                     size="sm"
                     onClick={() => router.push('/client/appointments')}
+                    className="bg-white/20 hover:bg-white/30 text-primary-foreground border-0"
                   >
                     Ver detalles
                   </Button>
@@ -352,8 +496,7 @@ export default function ClientDashboard() {
           </Card>
         )}
 
-        {/* Estadísticas rápidas */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4 sm:hidden">
           <Card className="text-center">
             <CardContent className="p-4">
               <div className="flex flex-col items-center space-y-2">
@@ -383,18 +526,80 @@ export default function ClientDashboard() {
           </Card>
         </div>
 
-        {/* Acciones rápidas */}
+        <div className="hidden sm:grid grid-cols-2 md:grid-cols-4 gap-6">
+          <Card className="text-center">
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-3">
+                <div className="p-3 bg-blue-100 rounded-full">
+                  <Calendar className="h-6 w-6 text-blue-600" />
+                </div>
+                <div className="text-left">
+                  <p className="text-2xl font-bold text-foreground">{stats.totalAppointments}</p>
+                  <p className="text-sm text-muted-foreground">Citas realizadas</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="text-center">
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-3">
+                <div className="p-3 bg-green-100 rounded-full">
+                  <Heart className="h-6 w-6 text-green-600" />
+                </div>
+                <div className="text-left">
+                  <p className="text-2xl font-bold text-foreground">{upcomingAppointments.length}</p>
+                  <p className="text-sm text-muted-foreground">Próximas citas</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="text-center">
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-3">
+                <div className="p-3 bg-rose-100 rounded-full">
+                  <CreditCard className="h-6 w-6 text-rose-600" />
+                </div>
+                <div className="text-left">
+                  <p className="text-2xl font-bold text-foreground">${stats.totalSpent.toLocaleString()}</p>
+                  <p className="text-sm text-muted-foreground">Total invertido</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="text-center">
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-3">
+                <div className="p-3 bg-yellow-100 rounded-full">
+                  <Award className="h-6 w-6 text-yellow-600" />
+                </div>
+                <div className="text-left">
+                  <p className="text-2xl font-bold text-foreground">{stats.completedThisMonth}</p>
+                  <p className="text-sm text-muted-foreground">Este mes</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-lg">Acciones Rápidas</CardTitle>
+            <CardTitle className="text-lg flex items-center space-x-2">
+              <Zap className="h-5 w-5 text-primary" />
+              <span>Acciones Rápidas</span>
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {quickActions.map((action) => (
                 <Button
                   key={action.title}
                   variant="outline"
-                  className="h-auto p-4 flex flex-col items-center space-y-2 border-2 hover:border-primary/50 transition-all"
+                  className={`h-auto p-4 flex flex-col items-center space-y-2 border-2 hover:border-primary/50 transition-all ${
+                    action.featured ? 'border-primary/30 bg-primary/5' : ''
+                  }`}
                   onClick={() => router.push(action.href)}
                 >
                   <div className={`p-2 rounded-lg ${action.color}`}>
@@ -410,11 +615,13 @@ export default function ClientDashboard() {
           </CardContent>
         </Card>
 
-        {/* Próximas citas */}
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">Mis Próximas Citas</CardTitle>
+              <CardTitle className="text-lg flex items-center space-x-2">
+                <Calendar className="h-5 w-5 text-primary" />
+                <span>Mis Próximas Citas</span>
+              </CardTitle>
               {upcomingAppointments.length > 3 && (
                 <Button 
                   variant="ghost" 
@@ -422,6 +629,7 @@ export default function ClientDashboard() {
                   onClick={() => router.push('/client/appointments')}
                 >
                   Ver todas
+                  <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
               )}
             </div>
@@ -432,34 +640,45 @@ export default function ClientDashboard() {
                 {upcomingAppointments.slice(0, 3).map((appointment) => (
                   <div
                     key={appointment.id}
-                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border"
+                    className="flex items-center justify-between p-4 bg-gradient-to-r from-muted/50 to-muted/30 rounded-lg border hover:shadow-sm transition-shadow cursor-pointer"
+                    onClick={() => router.push('/client/appointments')}
                   >
-                    <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-primary/10 rounded-lg">
-                        <Heart className="h-4 w-4 text-primary" />
+                    <div className="flex items-center space-x-3 flex-1 min-w-0">
+                      <div className="p-3 bg-primary/10 rounded-lg flex-shrink-0">
+                        <Heart className="h-5 w-5 text-primary" />
                       </div>
-                      <div>
-                        <p className="font-medium text-sm">{appointment.treatmentName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatDate(appointment.date.toDate ? appointment.date.toDate() : appointment.date)} • {appointment.startTime}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Con {appointment.professionalName}
-                        </p>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-sm truncate">{appointment.treatmentName}</p>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 text-xs text-muted-foreground mt-1">
+                          <span className="flex items-center space-x-1">
+                            <Calendar className="h-3 w-3" />
+                            <span>{formatDate(appointment.date.toDate ? appointment.date.toDate() : appointment.date)}</span>
+                          </span>
+                          <span className="flex items-center space-x-1">
+                            <Clock className="h-3 w-3" />
+                            <span>{appointment.startTime}</span>
+                          </span>
+                          <span className="flex items-center space-x-1">
+                            <User className="h-3 w-3" />
+                            <span className="truncate">{appointment.professionalName}</span>
+                          </span>
+                        </div>
                       </div>
                     </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                   </div>
                 ))}
               </div>
             ) : (
               <div className="text-center py-8">
-                <Calendar className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
+                <div className="p-4 bg-muted/30 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                  <Calendar className="h-8 w-8 text-muted-foreground" />
+                </div>
                 <h3 className="font-medium mb-2">No tienes citas programadas</h3>
                 <p className="text-sm text-muted-foreground mb-4">
                   ¡Es hora de cuidarte! Agenda tu próximo tratamiento
                 </p>
-                <Button onClick={() => router.push('/treatments')}>
+                <Button onClick={() => router.push('/treatments')} className="bg-primary hover:bg-primary/90">
                   <Plus className="h-4 w-4 mr-2" />
                   Agendar Cita
                 </Button>
@@ -468,42 +687,54 @@ export default function ClientDashboard() {
           </CardContent>
         </Card>
 
-        {/* Historial reciente */}
         {recentAppointments.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Historial Reciente</CardTitle>
+                <CardTitle className="text-lg flex items-center space-x-2">
+                  <Clock className="h-5 w-5 text-primary" />
+                  <span>Historial Reciente</span>
+                </CardTitle>
                 <Button 
                   variant="ghost" 
                   size="sm"
                   onClick={() => router.push('/client/history')}
                 >
                   Ver todo
+                  <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {recentAppointments.map((appointment) => (
+                {recentAppointments.slice(0, 3).map((appointment) => (
                   <div
                     key={appointment.id}
-                    className="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
+                    className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                    onClick={() => router.push('/client/history')}
                   >
-                    <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-green-100 rounded-lg">
+                    <div className="flex items-center space-x-3 flex-1 min-w-0">
+                      <div className="p-2 bg-green-100 rounded-lg flex-shrink-0">
                         <Clock className="h-4 w-4 text-green-600" />
                       </div>
-                      <div>
-                        <p className="font-medium text-sm">{appointment.treatmentName}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-sm truncate">{appointment.treatmentName}</p>
                         <p className="text-xs text-muted-foreground">
                           {formatDate(appointment.date.toDate ? appointment.date.toDate() : appointment.date)}
+                          <span className="hidden sm:inline"> • {appointment.professionalName}</span>
                         </p>
                       </div>
                     </div>
-                    <Badge variant="secondary" className="text-xs">
-                      Completado
-                    </Badge>
+                    <div className="flex items-center space-x-2 flex-shrink-0">
+                      {appointment.price && (
+                        <Badge variant="outline" className="text-xs hidden sm:inline-flex">
+                          ${appointment.price.toLocaleString()}
+                        </Badge>
+                      )}
+                      <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
+                        Completado
+                      </Badge>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -511,43 +742,100 @@ export default function ClientDashboard() {
           </Card>
         )}
 
-        {/* Información personal compacta */}
         {clientData && (
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Mi Información</CardTitle>
+              <CardTitle className="text-lg flex items-center space-x-2">
+                <User className="h-5 w-5 text-primary" />
+                <span>Mi Información</span>
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Email</span>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Mail className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Email</span>
+                    </div>
+                    <span className="text-sm font-medium truncate max-w-[180px]">{clientData.email}</span>
                   </div>
-                  <span className="text-sm font-medium">{clientData.email}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Teléfono</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Phone className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Teléfono</span>
+                    </div>
+                    <span className="text-sm font-medium">{clientData.phone}</span>
                   </div>
-                  <span className="text-sm font-medium">{clientData.phone}</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Star className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Miembro desde</span>
+                    </div>
+                    <span className="text-sm font-medium">{getMembershipDuration()}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Heart className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Favorito</span>
+                    </div>
+                    <span className="text-sm font-medium truncate max-w-[120px]">{stats.favoriteService}</span>
+                  </div>
                 </div>
-                <Button
-                  variant="outline"
-                  onClick={() => router.push('/client/profile')}
-                  className="w-full mt-3"
-                  size="sm"
-                >
-                  <Settings className="h-4 w-4 mr-2" />
-                  Actualizar perfil
-                </Button>
+                
+                <div className="pt-4 border-t border-border">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Button
+                      variant="outline"
+                      onClick={() => router.push('/client/profile')}
+                      size="sm"
+                      className="w-full"
+                    >
+                      <Settings className="h-4 w-4 mr-2" />
+                      Actualizar perfil
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => router.push('/client/history')}
+                      size="sm"
+                      className="w-full"
+                    >
+                      <Activity className="h-4 w-4 mr-2" />
+                      Ver historial completo
+                    </Button>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Espaciado inferior para navegación móvil */}
+        <Card className="bg-gradient-to-r from-secondary to-secondary/80 text-secondary-foreground border-0">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="p-3 bg-white/20 rounded-full">
+                  <Gift className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg">¿Sabías que...?</h3>
+                  <p className="text-sm text-secondary-foreground/90">
+                    Los tratamientos regulares mejoran 3x más los resultados
+                  </p>
+                </div>
+              </div>
+              <Button 
+                variant="secondary" 
+                size="sm"
+                onClick={() => router.push('/treatments')}
+                className="bg-white/20 hover:bg-white/30 text-secondary-foreground border-0"
+              >
+                Ver más
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="h-20"></div>
       </div>
     </div>

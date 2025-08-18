@@ -3,17 +3,34 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Clock, TrendingUp, Calendar, DollarSign, ArrowLeft, BarChart3, Filter } from 'lucide-react'
+import { 
+  Clock, 
+  TrendingUp, 
+  Calendar, 
+  DollarSign, 
+  ArrowLeft, 
+  BarChart3, 
+  Filter,
+  MoreVertical,
+  X,
+  AlertCircle,
+  Star,
+  Award,
+  Plus
+} from 'lucide-react'
 import { Button } from '../../../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card'
 import { Badge } from '../../../components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '../../../components/ui/sheet'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../../components/ui/dropdown-menu'
+import { Skeleton } from '../../../components/ui/skeleton'
 import { useAuthStore } from '../../../store/auth'
 import { appointmentService, treatmentService, professionalService } from '../../../lib/firebase-services'
 import { formatDate, formatDateTime } from '../../../lib/time-utils'
 
 /**
- * Página de historial de tratamientos del cliente
+ * Página de historial de tratamientos del cliente - Optimizada para móvil
  * Muestra estadísticas y análisis de tratamientos pasados
  */
 export default function ClientHistoryPage() {
@@ -25,6 +42,8 @@ export default function ClientHistoryPage() {
   const [filterPeriod, setFilterPeriod] = useState('all') // 'all', 'year', '6months', '3months'
   const [filterTreatment, setFilterTreatment] = useState('all')
   const [treatments, setTreatments] = useState([])
+  const [showStats, setShowStats] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
   const [stats, setStats] = useState({
     totalAppointments: 0,
     totalSpent: 0,
@@ -52,20 +71,41 @@ export default function ClientHistoryPage() {
     try {
       // Cargar tratamientos para el filtro
       const treatmentsData = await treatmentService.getAll()
-      setTreatments(treatmentsData)
+      setTreatments(Array.isArray(treatmentsData) ? treatmentsData : [])
 
       // Cargar todas las citas pasadas del cliente
       const appointmentsData = await appointmentService.getByClient(user.uid)
+      
+      // VALIDAR QUE SEA UN ARRAY
+      if (!Array.isArray(appointmentsData)) {
+        console.log('No appointments found or invalid data format')
+        setAppointments([])
+        return
+      }
       
       // Filtrar solo citas pasadas y enriquecer con datos
       const pastAppointments = await Promise.all(
         appointmentsData
           .filter(apt => apt.date && new Date(apt.date.toDate()) < new Date())
           .map(async (appointment) => {
-            const [treatment, professional] = await Promise.all([
-              treatmentService.getById(appointment.treatmentId),
-              professionalService.getById(appointment.professionalId)
-            ])
+            let treatment = null
+            let professional = null
+            
+            try {
+              if (appointment.treatmentId) {
+                treatment = await treatmentService.getById(appointment.treatmentId)
+              }
+            } catch (e) {
+              console.warn('Error loading treatment:', e)
+            }
+            
+            try {
+              if (appointment.professionalId) {
+                professional = await professionalService.getById(appointment.professionalId)
+              }
+            } catch (e) {
+              console.warn('Error loading professional:', e)
+            }
             
             return {
               ...appointment,
@@ -82,6 +122,7 @@ export default function ClientHistoryPage() {
       setAppointments(pastAppointments)
     } catch (error) {
       console.error('Error loading history data:', error)
+      setAppointments([]) // ASEGURAR QUE SIEMPRE SEA UN ARRAY
     } finally {
       setLoading(false)
     }
@@ -172,49 +213,233 @@ export default function ClientHistoryPage() {
     return labels[period]
   }
 
+  const clearFilters = () => {
+    setFilterPeriod('all')
+    setFilterTreatment('all')
+  }
+
+  // Loading state optimizado
   if (loading) {
     return (
-      <div className="min-h-screen bg-background p-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="animate-pulse space-y-6">
-            <div className="h-8 bg-muted rounded w-1/4"></div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-32 bg-muted rounded"></div>
-              ))}
+      <div className="min-h-screen bg-gradient-to-br from-primary/5 to-secondary/5">
+        <div className="border-b border-border/50 sticky top-0 z-10 backdrop-blur-sm bg-card/95">
+          <div className="p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <Skeleton className="h-8 w-8 rounded" />
+                <div className="space-y-2">
+                  <Skeleton className="h-6 w-32" />
+                  <Skeleton className="h-4 w-48" />
+                </div>
+              </div>
+              <Skeleton className="h-8 w-8 rounded" />
             </div>
           </div>
+        </div>
+        
+        <div className="p-4 space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <Skeleton key={i} className="h-20 rounded-xl" />
+            ))}
+          </div>
+          <Skeleton className="h-48 rounded-xl" />
+          <Skeleton className="h-64 rounded-xl" />
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-6xl mx-auto space-y-6">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => router.push('/client/dashboard')}
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Dashboard
-            </Button>
-            <div>
-              <h1 className="text-3xl font-bold text-foreground">Mi Historial</h1>
-              <p className="text-muted-foreground">
-                Análisis completo de tus tratamientos en Dhermica
-              </p>
+    <div className="min-h-screen bg-gradient-to-br from-primary/5 to-secondary/5">
+      
+      {/* Header optimizado para móvil y desktop */}
+      <div className="border-b border-border/50 sticky top-0 z-10 backdrop-blur-sm bg-card/95">
+        <div className="p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-3 flex-1 min-w-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push('/client/dashboard')}
+                className="flex-shrink-0"
+              >
+                <ArrowLeft className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Dashboard</span>
+              </Button>
+              <div className="min-w-0 flex-1">
+                <h1 className="text-xl sm:text-3xl font-bold text-foreground truncate">Mi Historial</h1>
+                <p className="text-sm text-muted-foreground hidden sm:block">
+                  Análisis completo de tus tratamientos en Dhermica
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-2 flex-shrink-0">
+              {/* Mobile Stats */}
+              <Sheet open={showStats} onOpenChange={setShowStats}>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="sm" className="sm:hidden">
+                    <TrendingUp className="h-4 w-4" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="bottom" className="h-[70vh]">
+                  <SheetHeader>
+                    <SheetTitle>Análisis Detallado</SheetTitle>
+                  </SheetHeader>
+                  <div className="space-y-6 mt-6">
+                    {/* Stats principales */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <Card>
+                        <CardContent className="p-4 text-center">
+                          <Calendar className="h-6 w-6 text-primary mx-auto mb-2" />
+                          <p className="text-2xl font-bold">{stats.totalAppointments}</p>
+                          <p className="text-xs text-muted-foreground">Tratamientos</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4 text-center">
+                          <DollarSign className="h-6 w-6 text-green-600 mx-auto mb-2" />
+                          <p className="text-lg font-bold">${stats.totalSpent.toLocaleString()}</p>
+                          <p className="text-xs text-muted-foreground">Total invertido</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                    
+                    {/* Top tratamientos */}
+                    <div>
+                      <h4 className="font-medium mb-3">Tratamientos Favoritos</h4>
+                      <div className="space-y-2">
+                        {stats.treatmentStats.slice(0, 3).map((treatment, index) => (
+                          <div key={treatment.name} className="flex items-center justify-between p-2 bg-muted rounded">
+                            <div className="flex items-center space-x-2">
+                              <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">
+                                {index + 1}
+                              </div>
+                              <span className="text-sm font-medium truncate">{treatment.name}</span>
+                            </div>
+                            <span className="text-sm font-medium">{treatment.count}x</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </SheetContent>
+              </Sheet>
+
+              {/* Mobile Filters */}
+              <Sheet open={showFilters} onOpenChange={setShowFilters}>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="sm" className="sm:hidden">
+                    <Filter className="h-4 w-4" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right">
+                  <SheetHeader>
+                    <SheetTitle>Filtros</SheetTitle>
+                    <SheetDescription>
+                      Personaliza la vista de tu historial
+                    </SheetDescription>
+                  </SheetHeader>
+                  <div className="space-y-4 mt-6">
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Período</label>
+                      <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todo el tiempo</SelectItem>
+                          <SelectItem value="year">Último año</SelectItem>
+                          <SelectItem value="6months">Últimos 6 meses</SelectItem>
+                          <SelectItem value="3months">Últimos 3 meses</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Tratamiento</label>
+                      <Select value={filterTreatment} onValueChange={setFilterTreatment}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todos los tratamientos</SelectItem>
+                          {treatments.map(treatment => (
+                            <SelectItem key={treatment.id} value={treatment.id}>
+                              {treatment.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {(filterPeriod !== 'all' || filterTreatment !== 'all') && (
+                      <div className="pt-4 border-t">
+                        <Button 
+                          variant="outline" 
+                          onClick={clearFilters}
+                          className="w-full"
+                        >
+                          <X className="h-4 w-4 mr-2" />
+                          Limpiar filtros
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </SheetContent>
+              </Sheet>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="hidden sm:flex">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => router.push('/treatments')}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nueva cita
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => router.push('/client/appointments')}>
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Ver próximas citas
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Filtros */}
-        <Card>
+      <div className="p-4 space-y-6">
+        
+        {/* Filtros móviles compactos */}
+        <div className="sm:hidden">
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm">
+                  <span className="font-medium">
+                    {getPeriodLabel(filterPeriod)}
+                  </span>
+                  {filterTreatment !== 'all' && (
+                    <span className="text-muted-foreground">
+                      {' • '}{treatments.find(t => t.id === filterTreatment)?.name || 'Tratamiento'}
+                    </span>
+                  )}
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setShowFilters(true)}>
+                  <Filter className="h-4 w-4 mr-2" />
+                  Filtrar
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Filtros desktop */}
+        <Card className="hidden sm:block">
           <CardContent className="p-6">
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1">
@@ -248,12 +473,39 @@ export default function ClientHistoryPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {(filterPeriod !== 'all' || filterTreatment !== 'all') && (
+                <div className="flex items-end">
+                  <Button variant="outline" onClick={clearFilters}>
+                    <X className="h-4 w-4 mr-2" />
+                    Limpiar
+                  </Button>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
 
-        {/* Estadísticas principales */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        {/* Estadísticas principales - Mobile */}
+        <div className="grid grid-cols-2 gap-4 sm:hidden">
+          <Card>
+            <CardContent className="p-4 text-center">
+              <Calendar className="h-6 w-6 text-primary mx-auto mb-2" />
+              <p className="text-xl font-bold">{stats.totalAppointments}</p>
+              <p className="text-xs text-muted-foreground">Tratamientos</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 text-center">
+              <DollarSign className="h-6 w-6 text-green-600 mx-auto mb-2" />
+              <p className="text-lg font-bold">${stats.totalSpent.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">Invertido</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Estadísticas principales - Desktop */}
+        <div className="hidden sm:grid grid-cols-1 md:grid-cols-4 gap-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Tratamientos</CardTitle>
@@ -273,7 +525,7 @@ export default function ClientHistoryPage() {
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-success">
+              <div className="text-2xl font-bold text-green-600">
                 ${stats.totalSpent.toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground">
@@ -318,7 +570,10 @@ export default function ClientHistoryPage() {
           {/* Tratamientos más frecuentes */}
           <Card>
             <CardHeader>
-              <CardTitle>Tratamientos Favoritos</CardTitle>
+              <CardTitle className="text-lg flex items-center space-x-2">
+                <Star className="h-5 w-5 text-primary" />
+                <span>Tratamientos Favoritos</span>
+              </CardTitle>
               <CardDescription>
                 Tus tratamientos más frecuentes
               </CardDescription>
@@ -327,19 +582,19 @@ export default function ClientHistoryPage() {
               {stats.treatmentStats.length > 0 ? (
                 <div className="space-y-4">
                   {stats.treatmentStats.slice(0, 5).map((treatment, index) => (
-                    <div key={treatment.name} className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary text-sm font-bold">
+                    <div key={treatment.name} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                      <div className="flex items-center space-x-3 flex-1 min-w-0">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary text-sm font-bold flex-shrink-0">
                           {index + 1}
                         </div>
-                        <div>
+                        <div className="min-w-0 flex-1">
                           <p className="font-medium truncate">{treatment.name}</p>
                           <p className="text-sm text-muted-foreground">
                             {treatment.count} {treatment.count === 1 ? 'vez' : 'veces'}
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right flex-shrink-0">
                         <p className="font-medium">${treatment.totalSpent.toLocaleString()}</p>
                         <p className="text-xs text-muted-foreground">
                           ${Math.round(treatment.averagePrice).toLocaleString()} prom.
@@ -362,7 +617,10 @@ export default function ClientHistoryPage() {
           {/* Gasto por año */}
           <Card>
             <CardHeader>
-              <CardTitle>Inversión Anual</CardTitle>
+              <CardTitle className="text-lg flex items-center space-x-2">
+                <Award className="h-5 w-5 text-primary" />
+                <span>Inversión Anual</span>
+              </CardTitle>
               <CardDescription>
                 Tu inversión en bienestar por año
               </CardDescription>
@@ -371,7 +629,7 @@ export default function ClientHistoryPage() {
               {stats.yearlySpending.length > 0 ? (
                 <div className="space-y-4">
                   {stats.yearlySpending.map((yearData) => (
-                    <div key={yearData.year} className="flex items-center justify-between">
+                    <div key={yearData.year} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                       <div className="flex items-center space-x-3">
                         <div className="flex items-center justify-center w-12 h-8 rounded bg-secondary/10 text-secondary text-sm font-bold">
                           {yearData.year}
@@ -409,43 +667,56 @@ export default function ClientHistoryPage() {
         {/* Lista detallada de tratamientos */}
         <Card>
           <CardHeader>
-            <CardTitle>Historial Detallado</CardTitle>
-            <CardDescription>
-              Cronología completa de tus tratamientos ({filteredAppointments.length} registros)
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg flex items-center space-x-2">
+                  <Clock className="h-5 w-5 text-primary" />
+                  <span>Historial Detallado</span>
+                </CardTitle>
+                <CardDescription>
+                  Cronología completa de tus tratamientos ({filteredAppointments.length} registros)
+                </CardDescription>
+              </div>
+              {filteredAppointments.length > 0 && (filterPeriod !== 'all' || filterTreatment !== 'all') && (
+                <Button variant="outline" size="sm" onClick={clearFilters} className="hidden sm:flex">
+                  <X className="h-4 w-4 mr-2" />
+                  Ver todo
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {filteredAppointments.length > 0 ? (
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 {filteredAppointments.map((appointment) => (
                   <div
                     key={appointment.id}
-                    className="flex items-center justify-between p-4 border border-border rounded-lg"
+                    className="flex items-center justify-between p-3 sm:p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
                   >
-                    <div className="flex items-center space-x-4">
-                      <div className="text-center">
-                        <p className="text-lg font-bold">
+                    <div className="flex items-center space-x-3 sm:space-x-4 flex-1 min-w-0">
+                      <div className="text-center flex-shrink-0">
+                        <p className="text-base sm:text-lg font-bold">
                           {formatDate(appointment.dateObj, 'dd')}
                         </p>
                         <p className="text-xs text-muted-foreground uppercase">
                           {formatDate(appointment.dateObj, 'MMM yyyy')}
                         </p>
                       </div>
-                      <div>
-                        <p className="font-medium">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-sm sm:text-base truncate">
                           {appointment.treatment?.name || 'Tratamiento eliminado'}
                         </p>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs sm:text-sm text-muted-foreground">
                           con {appointment.professional?.name || 'Profesional no asignado'}
                         </p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground hidden sm:block">
                           {formatDate(appointment.dateObj, 'EEEE d \'de\' MMMM \'de\' yyyy')}
                         </p>
                       </div>
                     </div>
-                    <div className="text-right space-y-1">
+                    <div className="text-right space-y-1 flex-shrink-0">
                       {appointment.price && (
-                        <Badge variant="secondary" className="text-success">
+                        <Badge variant="secondary" className="text-green-600 bg-green-100">
                           ${appointment.price.toLocaleString()}
                         </Badge>
                       )}
@@ -457,26 +728,33 @@ export default function ClientHistoryPage() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-12">
-                <Clock className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium mb-2">No hay registros</h3>
-                <p className="text-muted-foreground mb-4">
-                  No se encontraron tratamientos para los filtros seleccionados
+              <div className="text-center py-8 sm:py-12">
+                <Clock className="h-8 sm:h-12 w-8 sm:w-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-base sm:text-lg font-medium mb-2">No hay registros</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {appointments.length === 0 
+                    ? 'Aún no tienes tratamientos completados'
+                    : 'No se encontraron tratamientos para los filtros seleccionados'
+                  }
                 </p>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setFilterPeriod('all')
-                    setFilterTreatment('all')
-                  }}
-                >
-                  <Filter className="h-4 w-4 mr-2" />
-                  Limpiar Filtros
-                </Button>
+                {appointments.length === 0 ? (
+                  <Button onClick={() => router.push('/treatments')} size="sm">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Explorar Tratamientos
+                  </Button>
+                ) : (
+                  <Button variant="outline" onClick={clearFilters} size="sm">
+                    <Filter className="h-4 w-4 mr-2" />
+                    Limpiar Filtros
+                  </Button>
+                )}
               </div>
             )}
           </CardContent>
         </Card>
+
+        {/* Espaciado inferior */}
+        <div className="h-20"></div>
       </div>
     </div>
   )
