@@ -11,64 +11,184 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,
   Timestamp,
-  serverTimestamp
+  serverTimestamp,
+  enableNetwork,
+  disableNetwork
 } from 'firebase/firestore'
 import { db } from './firebase'
 
 /**
- * Servicios para interactuar con Firestore
- * Incluye CRUD para todas las entidades de Dhermica
+ * Cache en memoria para optimizar consultas frecuentes
  */
+class FirebaseCache {
+  constructor() {
+    this.cache = new Map()
+    this.cacheTTL = new Map()
+    this.defaultTTL = 5 * 60 * 1000 // 5 minutos
+  }
 
-// =============================================================================
-// SERVICIOS PARA TRATAMIENTOS
-// =============================================================================
+  set(key, value, ttl = this.defaultTTL) {
+    this.cache.set(key, value)
+    this.cacheTTL.set(key, Date.now() + ttl)
+  }
 
+  get(key) {
+    const expiry = this.cacheTTL.get(key)
+    if (!expiry || Date.now() > expiry) {
+      this.cache.delete(key)
+      this.cacheTTL.delete(key)
+      return null
+    }
+    return this.cache.get(key)
+  }
+
+  clear() {
+    this.cache.clear()
+    this.cacheTTL.clear()
+  }
+
+  delete(key) {
+    this.cache.delete(key)
+    this.cacheTTL.delete(key)
+  }
+}
+
+const cache = new FirebaseCache()
+
+/**
+ * Utilidades para optimización
+ */
+const optimizationUtils = {
+  /**
+   * Ejecutar consulta con caché
+   */
+  async withCache(key, queryFn, ttl) {
+    const cached = cache.get(key)
+    if (cached) {
+      console.log(`Cache hit: ${key}`)
+      return cached
+    }
+
+    const result = await queryFn()
+    cache.set(key, result, ttl)
+    console.log(`Cache miss: ${key}`)
+    return result
+  },
+
+  /**
+   * Invalidar caché relacionado
+   */
+  invalidateCache(patterns) {
+    const keys = Array.from(cache.cache.keys())
+    patterns.forEach(pattern => {
+      keys.forEach(key => {
+        if (key.includes(pattern)) {
+          cache.delete(key)
+        }
+      })
+    })
+  },
+
+  /**
+   * Retry con backoff exponencial
+   */
+  async withRetry(fn, maxRetries = 3, baseDelay = 1000) {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn()
+      } catch (error) {
+        if (attempt === maxRetries) throw error
+        
+        const delay = baseDelay * Math.pow(2, attempt)
+        console.log(`Retry attempt ${attempt + 1} after ${delay}ms`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+      }
+    }
+  }
+}
+
+/**
+ * Función utilitaria para conversión de tiempo
+ */
+function timeToMinutes(timeString) {
+  const [hours, minutes] = timeString.split(':').map(Number)
+  return hours * 60 + minutes
+}
+
+/**
+ * SERVICIOS PARA TRATAMIENTOS - OPTIMIZADOS
+ */
 export const treatmentService = {
   /**
-   * Obtener todos los tratamientos activos
+   * Obtener todos los tratamientos con caché
    */
-  async getAll() {
-    try {
-      const querySnapshot = await getDocs(
-        query(
-          collection(db, 'treatments'), 
-          where('active', '==', true), 
-          orderBy('name')
-        )
-      )
-      return querySnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      }))
-    } catch (error) {
-      console.error('Error getting treatments:', error)
-      throw error
+  async getAll(useCache = true) {
+    const cacheKey = 'treatments:all'
+    
+    if (!useCache) {
+      cache.delete(cacheKey)
     }
+
+    return optimizationUtils.withCache(
+      cacheKey,
+      async () => {
+        try {
+          const querySnapshot = await getDocs(
+            query(
+              collection(db, 'treatments'),
+              where('active', '==', true),
+              orderBy('name')
+            )
+          )
+          
+          return querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }))
+        } catch (error) {
+          console.error('Error getting treatments:', error)
+          throw error
+        }
+      },
+      10 * 60 * 1000 // 10 minutos TTL
+    )
   },
 
   /**
-   * Obtener tratamiento por ID
+   * Obtener tratamiento por ID con caché
    */
-  async getById(id) {
-    try {
-      const docRef = doc(db, 'treatments', id)
-      const docSnap = await getDoc(docRef)
-      
-      if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() }
-      } else {
-        return null
-      }
-    } catch (error) {
-      console.error('Error getting treatment:', error)
-      throw error
+  async getById(id, useCache = true) {
+    const cacheKey = `treatment:${id}`
+    
+    if (!useCache) {
+      cache.delete(cacheKey)
     }
+
+    return optimizationUtils.withCache(
+      cacheKey,
+      async () => {
+        try {
+          const docRef = doc(db, 'treatments', id)
+          const docSnap = await getDoc(docRef)
+          
+          if (docSnap.exists()) {
+            return { id: docSnap.id, ...docSnap.data() }
+          } else {
+            return null
+          }
+        } catch (error) {
+          console.error('Error getting treatment:', error)
+          throw error
+        }
+      },
+      15 * 60 * 1000 // 15 minutos TTL
+    )
   },
 
   /**
-   * Crear nuevo tratamiento
+   * Crear tratamiento con invalidación de caché
    */
   async create(data) {
     try {
@@ -78,6 +198,10 @@ export const treatmentService = {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       })
+      
+      // Invalidar caché
+      optimizationUtils.invalidateCache(['treatments:'])
+      
       return docRef.id
     } catch (error) {
       console.error('Error creating treatment:', error)
@@ -86,7 +210,7 @@ export const treatmentService = {
   },
 
   /**
-   * Actualizar tratamiento
+   * Actualizar tratamiento con invalidación de caché
    */
   async update(id, data) {
     try {
@@ -95,6 +219,9 @@ export const treatmentService = {
         ...data,
         updatedAt: serverTimestamp()
       })
+      
+      // Invalidar caché específico y general
+      optimizationUtils.invalidateCache(['treatments:', `treatment:${id}`])
     } catch (error) {
       console.error('Error updating treatment:', error)
       throw error
@@ -102,15 +229,18 @@ export const treatmentService = {
   },
 
   /**
-   * Eliminar tratamiento (soft delete)
+   * Eliminar tratamiento con invalidación de caché
    */
   async delete(id) {
     try {
       const docRef = doc(db, 'treatments', id)
-      await updateDoc(docRef, { 
-        active: false, 
-        updatedAt: serverTimestamp() 
+      await updateDoc(docRef, {
+        active: false,
+        updatedAt: serverTimestamp()
       })
+      
+      // Invalidar caché
+      optimizationUtils.invalidateCache(['treatments:', `treatment:${id}`])
     } catch (error) {
       console.error('Error deleting treatment:', error)
       throw error
@@ -118,54 +248,78 @@ export const treatmentService = {
   }
 }
 
-// =============================================================================
-// SERVICIOS PARA PROFESIONALES
-// =============================================================================
-
+/**
+ * SERVICIOS PARA PROFESIONALES - OPTIMIZADOS
+ */
 export const professionalService = {
   /**
-   * Obtener todos los profesionales disponibles
+   * Obtener todos los profesionales con caché
    */
-  async getAll() {
-    try {
-      const querySnapshot = await getDocs(
-        query(
-          collection(db, 'professionals'), 
-          where('available', '==', true), 
-          orderBy('name')
-        )
-      )
-      return querySnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      }))
-    } catch (error) {
-      console.error('Error getting professionals:', error)
-      throw error
+  async getAll(useCache = true) {
+    const cacheKey = 'professionals:all'
+    
+    if (!useCache) {
+      cache.delete(cacheKey)
     }
+
+    return optimizationUtils.withCache(
+      cacheKey,
+      async () => {
+        try {
+          const querySnapshot = await getDocs(
+            query(
+              collection(db, 'professionals'),
+              where('available', '==', true),
+              orderBy('name')
+            )
+          )
+          
+          return querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }))
+        } catch (error) {
+          console.error('Error getting professionals:', error)
+          throw error
+        }
+      },
+      10 * 60 * 1000 // 10 minutos TTL
+    )
   },
 
   /**
-   * Obtener profesional por ID
+   * Obtener profesional por ID con caché
    */
-  async getById(id) {
-    try {
-      const docRef = doc(db, 'professionals', id)
-      const docSnap = await getDoc(docRef)
-      
-      if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() }
-      } else {
-        return null
-      }
-    } catch (error) {
-      console.error('Error getting professional:', error)
-      throw error
+  async getById(id, useCache = true) {
+    const cacheKey = `professional:${id}`
+    
+    if (!useCache) {
+      cache.delete(cacheKey)
     }
+
+    return optimizationUtils.withCache(
+      cacheKey,
+      async () => {
+        try {
+          const docRef = doc(db, 'professionals', id)
+          const docSnap = await getDoc(docRef)
+          
+          if (docSnap.exists()) {
+            return { id: docSnap.id, ...docSnap.data() }
+          } else {
+            return null
+          }
+        } catch (error) {
+          console.error('Error getting professional:', error)
+          throw error
+        }
+      },
+      15 * 60 * 1000 // 15 minutos TTL
+    )
   },
 
   /**
-   * Crear nuevo profesional
+   * Crear profesional con invalidación de caché
    */
   async create(data) {
     try {
@@ -175,6 +329,10 @@ export const professionalService = {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       })
+      
+      // Invalidar caché
+      optimizationUtils.invalidateCache(['professionals:'])
+      
       return docRef.id
     } catch (error) {
       console.error('Error creating professional:', error)
@@ -183,7 +341,7 @@ export const professionalService = {
   },
 
   /**
-   * Actualizar profesional
+   * Actualizar profesional con invalidación de caché
    */
   async update(id, data) {
     try {
@@ -192,6 +350,9 @@ export const professionalService = {
         ...data,
         updatedAt: serverTimestamp()
       })
+      
+      // Invalidar caché
+      optimizationUtils.invalidateCache(['professionals:', `professional:${id}`])
     } catch (error) {
       console.error('Error updating professional:', error)
       throw error
@@ -199,62 +360,92 @@ export const professionalService = {
   }
 }
 
-// =============================================================================
-// SERVICIOS PARA CLIENTES
-// =============================================================================
-
+/**
+ * SERVICIOS PARA CLIENTES - OPTIMIZADOS
+ */
 export const clientService = {
   /**
-   * Buscar clientes por término de búsqueda
+   * Búsqueda de clientes con debounce y caché
    */
-  async search(searchTerm) {
-    try {
-      // Obtener todos los clientes y filtrar en el cliente
-      // (Firestore no tiene búsqueda full-text nativa)
-      const querySnapshot = await getDocs(
-        query(collection(db, 'clients'), orderBy('name'), limit(50))
-      )
-      
-      const clients = querySnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      }))
-      
-      if (!searchTerm) return clients
-      
-      const searchLower = searchTerm.toLowerCase()
-      return clients.filter(client =>
-        client.name.toLowerCase().includes(searchLower) ||
-        client.phone.includes(searchTerm) ||
-        client.email.toLowerCase().includes(searchLower)
-      )
-    } catch (error) {
-      console.error('Error searching clients:', error)
-      throw error
+  async search(searchTerm, useCache = true) {
+    // No cachear búsquedas vacías o muy cortas
+    if (!searchTerm || searchTerm.length < 2) {
+      return []
     }
+
+    const cacheKey = `clients:search:${searchTerm.toLowerCase()}`
+    
+    if (!useCache) {
+      cache.delete(cacheKey)
+    }
+
+    return optimizationUtils.withCache(
+      cacheKey,
+      async () => {
+        try {
+          // Obtener todos los clientes (con límite)
+          const querySnapshot = await getDocs(
+            query(
+              collection(db, 'clients'),
+              orderBy('name'),
+              limit(100) // Limitar para performance
+            )
+          )
+          
+          const clients = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }))
+          
+          // Filtrar en el cliente para mejor performance
+          const searchLower = searchTerm.toLowerCase()
+          return clients.filter(client =>
+            client.name.toLowerCase().includes(searchLower) ||
+            client.phone.includes(searchTerm) ||
+            client.email.toLowerCase().includes(searchLower)
+          )
+        } catch (error) {
+          console.error('Error searching clients:', error)
+          throw error
+        }
+      },
+      2 * 60 * 1000 // 2 minutos TTL para búsquedas
+    )
   },
 
   /**
-   * Obtener cliente por ID
+   * Obtener cliente por ID con caché
    */
-  async getById(id) {
-    try {
-      const docRef = doc(db, 'clients', id)
-      const docSnap = await getDoc(docRef)
-      
-      if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() }
-      } else {
-        return null
-      }
-    } catch (error) {
-      console.error('Error getting client:', error)
-      throw error
+  async getById(id, useCache = true) {
+    const cacheKey = `client:${id}`
+    
+    if (!useCache) {
+      cache.delete(cacheKey)
     }
+
+    return optimizationUtils.withCache(
+      cacheKey,
+      async () => {
+        try {
+          const docRef = doc(db, 'clients', id)
+          const docSnap = await getDoc(docRef)
+          
+          if (docSnap.exists()) {
+            return { id: docSnap.id, ...docSnap.data() }
+          } else {
+            return null
+          }
+        } catch (error) {
+          console.error('Error getting client:', error)
+          throw error
+        }
+      },
+      10 * 60 * 1000 // 10 minutos TTL
+    )
   },
 
   /**
-   * Crear nuevo cliente
+   * Crear cliente con invalidación de caché
    */
   async create(data) {
     try {
@@ -263,6 +454,10 @@ export const clientService = {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       })
+      
+      // Invalidar caché de búsquedas
+      optimizationUtils.invalidateCache(['clients:search'])
+      
       return docRef.id
     } catch (error) {
       console.error('Error creating client:', error)
@@ -271,7 +466,7 @@ export const clientService = {
   },
 
   /**
-   * Actualizar cliente
+   * Actualizar cliente con invalidación de caché
    */
   async update(id, data) {
     try {
@@ -280,6 +475,9 @@ export const clientService = {
         ...data,
         updatedAt: serverTimestamp()
       })
+      
+      // Invalidar caché
+      optimizationUtils.invalidateCache(['clients:', `client:${id}`])
     } catch (error) {
       console.error('Error updating client:', error)
       throw error
@@ -287,91 +485,144 @@ export const clientService = {
   }
 }
 
-// =============================================================================
-// SERVICIOS PARA CITAS
-// =============================================================================
-
+/**
+ * SERVICIOS PARA CITAS - OPTIMIZADOS
+ */
 export const appointmentService = {
   /**
-   * Obtener citas por fecha
+   * Obtener citas por fecha con caché inteligente
    */
-  async getByDate(date) {
-    try {
-      const startOfDay = new Date(date)
-      startOfDay.setHours(0, 0, 0, 0)
-      
-      const endOfDay = new Date(date)
-      endOfDay.setHours(23, 59, 59, 999)
-
-      const querySnapshot = await getDocs(
-        query(
-          collection(db, 'appointments'),
-          where('date', '>=', Timestamp.fromDate(startOfDay)),
-          where('date', '<=', Timestamp.fromDate(endOfDay)),
-          orderBy('date'),
-          orderBy('startTime')
-        )
-      )
-      
-      return querySnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      }))
-    } catch (error) {
-      console.error('Error getting appointments by date:', error)
-      throw error
+  async getByDate(date, useCache = true) {
+    const dateStr = date.toISOString().split('T')[0]
+    const cacheKey = `appointments:date:${dateStr}`
+    
+    // Solo cachear fechas futuras y el día actual
+    const today = new Date().toISOString().split('T')[0]
+    const shouldCache = dateStr >= today && useCache
+    
+    if (!shouldCache) {
+      cache.delete(cacheKey)
     }
+
+    const queryFn = async () => {
+      try {
+        const startOfDay = new Date(date)
+        startOfDay.setHours(0, 0, 0, 0)
+        
+        const endOfDay = new Date(date)
+        endOfDay.setHours(23, 59, 59, 999)
+
+        const querySnapshot = await getDocs(
+          query(
+            collection(db, 'appointments'),
+            where('date', '>=', Timestamp.fromDate(startOfDay)),
+            where('date', '<=', Timestamp.fromDate(endOfDay)),
+            orderBy('date'),
+            orderBy('startTime')
+          )
+        )
+        
+        return querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+      } catch (error) {
+        console.error('Error getting appointments by date:', error)
+        throw error
+      }
+    }
+
+    if (shouldCache) {
+      return optimizationUtils.withCache(
+        cacheKey,
+        queryFn,
+        5 * 60 * 1000 // 5 minutos TTL
+      )
+    }
+
+    return queryFn()
   },
 
   /**
-   * Obtener citas por profesional y fecha
+   * Obtener citas por profesional y fecha con caché
    */
-  async getByProfessionalAndDate(professionalId, date) {
-    try {
-      const startOfDay = new Date(date)
-      startOfDay.setHours(0, 0, 0, 0)
-      
-      const endOfDay = new Date(date)
-      endOfDay.setHours(23, 59, 59, 999)
-
-      const querySnapshot = await getDocs(
-        query(
-          collection(db, 'appointments'),
-          where('professionalId', '==', professionalId),
-          where('date', '>=', Timestamp.fromDate(startOfDay)),
-          where('date', '<=', Timestamp.fromDate(endOfDay)),
-          orderBy('date'),
-          orderBy('startTime')
-        )
-      )
-      
-      return querySnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      }))
-    } catch (error) {
-      console.error('Error getting appointments by professional and date:', error)
-      throw error
+  async getByProfessionalAndDate(professionalId, date, useCache = true) {
+    const dateStr = date.toISOString().split('T')[0]
+    const cacheKey = `appointments:professional:${professionalId}:date:${dateStr}`
+    
+    const today = new Date().toISOString().split('T')[0]
+    const shouldCache = dateStr >= today && useCache
+    
+    if (!shouldCache) {
+      cache.delete(cacheKey)
     }
+
+    const queryFn = async () => {
+      try {
+        const startOfDay = new Date(date)
+        startOfDay.setHours(0, 0, 0, 0)
+        
+        const endOfDay = new Date(date)
+        endOfDay.setHours(23, 59, 59, 999)
+
+        const querySnapshot = await getDocs(
+          query(
+            collection(db, 'appointments'),
+            where('professionalId', '==', professionalId),
+            where('date', '>=', Timestamp.fromDate(startOfDay)),
+            where('date', '<=', Timestamp.fromDate(endOfDay)),
+            orderBy('date'),
+            orderBy('startTime')
+          )
+        )
+        
+        return querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+      } catch (error) {
+        console.error('Error getting appointments by professional and date:', error)
+        throw error
+      }
+    }
+
+    if (shouldCache) {
+      return optimizationUtils.withCache(
+        cacheKey,
+        queryFn,
+        3 * 60 * 1000 // 3 minutos TTL
+      )
+    }
+
+    return queryFn()
   },
 
   /**
-   * Obtener citas de un cliente
+   * Obtener citas de un cliente con paginación
    */
-  async getByClient(clientId) {
+  async getByClient(clientId, lastDoc = null, limitCount = 20) {
     try {
-      const querySnapshot = await getDocs(
-        query(
-          collection(db, 'appointments'),
-          where('clientId', '==', clientId),
-          orderBy('date', 'desc')
-        )
+      let q = query(
+        collection(db, 'appointments'),
+        where('clientId', '==', clientId),
+        orderBy('date', 'desc'),
+        limit(limitCount)
       )
+
+      if (lastDoc) {
+        q = query(q, startAfter(lastDoc))
+      }
+
+      const querySnapshot = await getDocs(q)
       
-      return querySnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      }))
+      return {
+        appointments: querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })),
+        lastDoc: querySnapshot.docs[querySnapshot.docs.length - 1],
+        hasMore: querySnapshot.docs.length === limitCount
+      }
     } catch (error) {
       console.error('Error getting appointments by client:', error)
       throw error
@@ -379,15 +630,66 @@ export const appointmentService = {
   },
 
   /**
-   * Crear nueva cita
+   * Validar conflictos de horario optimizado
+   */
+  async validateAppointmentTime(professionalId, date, startTime, duration, excludeId = null) {
+    try {
+      // Usar servicio optimizado para obtener citas
+      const appointments = await this.getByProfessionalAndDate(professionalId, date)
+      
+      const newStartMinutes = timeToMinutes(startTime)
+      const newEndMinutes = newStartMinutes + duration
+      
+      const conflicts = appointments
+        .filter(apt => apt.id !== excludeId)
+        .filter(apt => {
+          const existingStart = timeToMinutes(apt.startTime)
+          const existingEnd = existingStart + apt.duration
+          
+          // Verificar solapamiento
+          return !(newEndMinutes <= existingStart || newStartMinutes >= existingEnd)
+        })
+      
+      return {
+        isValid: conflicts.length === 0,
+        conflicts
+      }
+    } catch (error) {
+      console.error('Error validating appointment time:', error)
+      throw error
+    }
+  },
+
+  /**
+   * Crear cita con validación automática e invalidación de caché
    */
   async create(data) {
     try {
+      // Validar conflictos antes de crear
+      const validation = await this.validateAppointmentTime(
+        data.professionalId,
+        data.date,
+        data.startTime,
+        data.duration
+      )
+
+      if (!validation.isValid) {
+        throw new Error('Conflicto de horario detectado')
+      }
+
       const docRef = await addDoc(collection(db, 'appointments'), {
         ...data,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       })
+      
+      // Invalidar caché relacionado
+      const dateStr = data.date.toISOString().split('T')[0]
+      optimizationUtils.invalidateCache([
+        `appointments:date:${dateStr}`,
+        `appointments:professional:${data.professionalId}`
+      ])
+      
       return docRef.id
     } catch (error) {
       console.error('Error creating appointment:', error)
@@ -396,15 +698,41 @@ export const appointmentService = {
   },
 
   /**
-   * Actualizar cita
+   * Actualizar cita con validación e invalidación de caché
    */
   async update(id, data) {
     try {
+      // Si se cambia fecha/hora, validar conflictos
+      if (data.date || data.startTime || data.duration) {
+        const validation = await this.validateAppointmentTime(
+          data.professionalId,
+          data.date,
+          data.startTime,
+          data.duration,
+          id
+        )
+
+        if (!validation.isValid) {
+          throw new Error('Conflicto de horario detectado')
+        }
+      }
+
       const docRef = doc(db, 'appointments', id)
       await updateDoc(docRef, {
         ...data,
         updatedAt: serverTimestamp()
       })
+      
+      // Invalidar caché relacionado
+      if (data.date) {
+        const dateStr = data.date.toISOString().split('T')[0]
+        optimizationUtils.invalidateCache([
+          `appointments:date:${dateStr}`,
+          `appointments:professional:`
+        ])
+      } else {
+        optimizationUtils.invalidateCache(['appointments:'])
+      }
     } catch (error) {
       console.error('Error updating appointment:', error)
       throw error
@@ -412,12 +740,15 @@ export const appointmentService = {
   },
 
   /**
-   * Eliminar cita
+   * Eliminar cita con invalidación de caché
    */
   async delete(id) {
     try {
       const docRef = doc(db, 'appointments', id)
       await deleteDoc(docRef)
+      
+      // Invalidar todo el caché de citas
+      optimizationUtils.invalidateCache(['appointments:'])
     } catch (error) {
       console.error('Error deleting appointment:', error)
       throw error

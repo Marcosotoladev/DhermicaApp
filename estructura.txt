@@ -4,8 +4,7 @@ find . -type f \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx"
   ! -path "./.git/*" \
   | sort > estructura.txt
 
-
-
+  
 
 ./components.json
 ./jsconfig.json
@@ -51,6 +50,7 @@ find . -type f \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx"
 ./src/components/ui/separator.jsx
 ./src/components/ui/skeleton.jsx
 ./src/components/ui/sonner.jsx
+./src/components/ui/switch.jsx
 ./src/components/ui/textarea.jsx
 ./src/lib/data-structures.js
 ./src/lib/firebase.js

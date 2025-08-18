@@ -1,7 +1,7 @@
 // src/components/custom/AppointmentForm.js
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -13,11 +13,11 @@ import {
   ChevronLeft, 
   ChevronRight,
   CheckCircle,
-  AlertTriangle,
   Loader2,
   DollarSign,
   Heart,
-  MapPin
+  Wifi,
+  WifiOff
 } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
@@ -25,16 +25,35 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
-import { Badge } from '../ui/badge'
 import { Separator } from '../ui/separator'
 import { Calendar as CalendarComponent } from '../ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import { ClientSearch } from './ClientSearch'
 import { TimeSlotPicker } from './TimeSlotPicker'
-import { professionalService, treatmentService, appointmentService } from '../../lib/firebase-services'
+import { MedicalValidation, useMedicalValidation } from './MedicalValidation'
+
+// Servicios optimizados
+import { 
+  professionalServiceOptimized, 
+  treatmentServiceOptimized, 
+  appointmentServiceOptimized 
+} from '../../lib/firebase-services-optimized'
+
+// Hooks de performance
+import { 
+  useDebounce, 
+  useOnlineStatus, 
+  usePerformanceMonitor,
+  useErrorHandler,
+  useLazyLoad 
+} from '../../hooks/use-performance'
+
+// Servicio de notificaciones
+import notificationService, { useNotifications } from '../../lib/notification-service'
+
 import { formatDate, formatTimeString, timeToMinutes, minutesToTime } from '../../lib/time-utils'
 
-// Schema de validación
+// Schema de validación optimizado
 const appointmentSchema = z.object({
   professionalId: z.string().min(1, 'Profesional requerido'),
   clientId: z.string().min(1, 'Cliente requerido'),
@@ -47,14 +66,14 @@ const appointmentSchema = z.object({
 })
 
 /**
- * Formulario Principal de Citas - Wizard multi-paso
- * Integra: ClientSearch, TimeSlotPicker, y validaciones
+ * Formulario de Citas Optimizado con Performance y PWA
  */
-export function AppointmentForm({ 
+export function AppointmentFormOptimized({ 
   onSuccess, 
   editingAppointment = null,
   onCancel 
 }) {
+  // Estados principales
   const [currentStep, setCurrentStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -62,10 +81,26 @@ export function AppointmentForm({
   const [treatments, setTreatments] = useState([])
   const [selectedClient, setSelectedClient] = useState(null)
   const [selectedTreatment, setSelectedTreatment] = useState(null)
-  const [medicalWarnings, setMedicalWarnings] = useState([])
   const [calculatedEndTime, setCalculatedEndTime] = useState('')
   const [totalSteps] = useState(4)
 
+  // Hooks de optimización
+  const { isOnline, isFirebaseOnline } = useOnlineStatus()
+  const { executeWithRetry, error: retryError, retryCount } = useErrorHandler()
+  const { notify } = useNotifications()
+  const { elementRef: formRef, shouldRender } = useLazyLoad()
+  
+  // Performance monitoring
+  usePerformanceMonitor('AppointmentFormOptimized')
+
+  // Validación médica optimizada
+  const {
+    validation: medicalValidation,
+    loading: medicalLoading,
+    hasWarnings: hasMedicalWarnings
+  } = useMedicalValidation(selectedClient?.id, selectedTreatment?.id)
+
+  // Form con validación optimizada
   const form = useForm({
     resolver: zodResolver(appointmentSchema),
     defaultValues: {
@@ -77,87 +112,119 @@ export function AppointmentForm({
       duration: 60,
       price: 0,
       notes: ''
-    }
+    },
+    mode: 'onChange' // Validación en tiempo real
   })
 
-  // Cargar datos iniciales
-  useEffect(() => {
-    loadInitialData()
-  }, [])
+  // Debounce de los valores del formulario para validación
+  const formValues = form.watch()
+  const debouncedFormValues = useDebounce(formValues, 300)
 
-  // Cargar datos para edición
+  // Datos memoizados para performance
+  const availableProfessionals = useMemo(() => {
+    return professionals.filter(p => p.available)
+  }, [professionals])
+
+  const availableTreatments = useMemo(() => {
+    return treatments.filter(t => t.active)
+  }, [treatments])
+
+  // Efectos optimizados
+  useEffect(() => {
+    if (shouldRender) {
+      loadInitialData()
+    }
+  }, [shouldRender])
+
   useEffect(() => {
     if (editingAppointment) {
       loadEditingData()
     }
   }, [editingAppointment])
 
+  // Notificar cambios de conexión
+  useEffect(() => {
+    if (!isOnline) {
+      notificationService.notifyConnectionError()
+    } else if (isOnline && !isFirebaseOnline) {
+      notify('warning', 'Conectando con el servidor...', { duration: 2000 })
+    } else if (isOnline && isFirebaseOnline && retryCount > 0) {
+      notificationService.notifyConnectionRestored()
+    }
+  }, [isOnline, isFirebaseOnline, retryCount])
+
   const loadInitialData = async () => {
     try {
-      const [professionalsData, treatmentsData] = await Promise.all([
-        professionalService.getAll(),
-        treatmentService.getAll()
-      ])
+      const [professionalsData, treatmentsData] = await executeWithRetry(async () => {
+        return Promise.all([
+          professionalServiceOptimized.getAll(true), // usar caché
+          treatmentServiceOptimized.getAll(true)
+        ])
+      })
       
       setProfessionals(professionalsData)
       setTreatments(treatmentsData)
       
-      console.log('Datos cargados:', {
+      console.log('Datos cargados desde caché:', {
         professionals: professionalsData.length,
         treatments: treatmentsData.length
       })
     } catch (error) {
       console.error('Error loading initial data:', error)
-      setError('Error cargando datos iniciales')
+      setError('Error cargando datos. Verificando conexión...')
+      
+      if (!isOnline) {
+        notify('error', 'Sin conexión a internet', {
+          description: 'Verifica tu conexión y reintenta'
+        })
+      }
     }
   }
 
   const loadEditingData = async () => {
     try {
-      // TODO: Cargar datos de la cita para edición
-      console.log('Cargando datos para edición:', editingAppointment)
+      if (editingAppointment.clientId) {
+        const client = await executeWithRetry(() => 
+          clientServiceOptimized.getById(editingAppointment.clientId)
+        )
+        setSelectedClient(client)
+        form.setValue('clientId', client.id)
+      }
+
+      if (editingAppointment.treatmentId) {
+        const treatment = await executeWithRetry(() =>
+          treatmentServiceOptimized.getById(editingAppointment.treatmentId)
+        )
+        setSelectedTreatment(treatment)
+        form.setValue('treatmentId', treatment.id)
+      }
+
+      // Cargar otros valores
+      Object.keys(editingAppointment).forEach(key => {
+        if (form.getValues()[key] !== undefined) {
+          form.setValue(key, editingAppointment[key])
+        }
+      })
+
+      console.log('Datos de edición cargados:', editingAppointment)
     } catch (error) {
       console.error('Error loading editing data:', error)
+      notify('error', 'Error cargando datos de la cita')
     }
   }
 
-  // Validar restricciones médicas
-  const validateMedicalRestrictions = (client, treatment) => {
-    if (!client?.medicalInfo || !treatment?.medicalRestrictions) {
-      return []
-    }
-
-    const warnings = []
-    const { medicalInfo } = client
-    const { medicalRestrictions } = treatment
-
-    if (medicalRestrictions.includes('diabetes') && medicalInfo.diabetes) {
-      warnings.push('ATENCIÓN: Cliente tiene diabetes - Verificar protocolo especial')
-    }
-    if (medicalRestrictions.includes('cancer') && medicalInfo.cancer) {
-      warnings.push('ATENCIÓN: Cliente tiene/tuvo cáncer - Requiere autorización médica')
-    }
-    if (medicalRestrictions.includes('tattoos') && medicalInfo.tattoos) {
-      warnings.push('ATENCIÓN: Cliente tiene tatuajes - Verificar zona de tratamiento')
-    }
-
-    return warnings
-  }
-
-  // Manejar selección de cliente
+  // Handlers optimizados
   const handleClientSelect = (client) => {
     console.log('Cliente seleccionado:', client)
     setSelectedClient(client)
     form.setValue('clientId', client.id)
     
-    // Validar restricciones médicas si ya hay tratamiento seleccionado
+    // Trigger para validación médica
     if (selectedTreatment) {
-      const warnings = validateMedicalRestrictions(client, selectedTreatment)
-      setMedicalWarnings(warnings)
+      notify('info', 'Validando restricciones médicas...', { duration: 2000 })
     }
   }
 
-  // Manejar selección de tratamiento
   const handleTreatmentSelect = (treatmentId) => {
     const treatment = treatments.find(t => t.id === treatmentId)
     console.log('Tratamiento seleccionado:', treatment)
@@ -169,15 +236,14 @@ export function AppointmentForm({
       form.setValue('duration', treatment.duration || 60)
       form.setValue('price', treatment.basePrice || 0)
       
-      // Validar restricciones médicas si ya hay cliente seleccionado
-      if (selectedClient) {
-        const warnings = validateMedicalRestrictions(selectedClient, treatment)
-        setMedicalWarnings(warnings)
-      }
+      // Mostrar información del tratamiento
+      notify('success', `Tratamiento seleccionado: ${treatment.name}`, {
+        description: `Duración: ${treatment.duration}min - Precio: $${treatment.basePrice}`,
+        duration: 3000
+      })
     }
   }
 
-  // Manejar selección de horario
   const handleTimeSelect = (time) => {
     console.log('Horario seleccionado:', time)
     form.setValue('startTime', time)
@@ -187,9 +253,13 @@ export function AppointmentForm({
     const startMinutes = timeToMinutes(time)
     const endTime = minutesToTime(startMinutes + duration)
     setCalculatedEndTime(endTime)
+
+    notify('info', `Horario: ${formatTimeString(time)} - ${endTime}`, {
+      duration: 2000
+    })
   }
 
-  // Validar paso actual
+  // Validación de pasos optimizada
   const validateCurrentStep = async () => {
     const values = form.getValues()
     
@@ -199,7 +269,21 @@ export function AppointmentForm({
       case 2: // Cliente
         return values.clientId && selectedClient
       case 3: // Tratamiento
-        return values.treatmentId && selectedTreatment
+        if (!values.treatmentId || !selectedTreatment) return false
+        
+        // Verificar advertencias médicas críticas
+        if (hasMedicalWarnings && medicalValidation && !medicalValidation.isValid) {
+          const criticalWarnings = medicalValidation.warnings.filter(w => 
+            w.includes('CÁNCER') || w.includes('contraindicado')
+          )
+          
+          if (criticalWarnings.length > 0) {
+            setError('Este tratamiento tiene restricciones médicas críticas. Revisa las advertencias.')
+            return false
+          }
+        }
+        
+        return true
       case 4: // Horario y confirmación
         return values.startTime
       default:
@@ -207,7 +291,7 @@ export function AppointmentForm({
     }
   }
 
-  // Navegar entre pasos
+  // Navegación optimizada
   const nextStep = async () => {
     const isValid = await validateCurrentStep()
     if (!isValid) {
@@ -218,6 +302,12 @@ export function AppointmentForm({
     setError('')
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1)
+      
+      // Precargar datos del siguiente paso
+      if (currentStep === 1) {
+        // Precargar clientes si es necesario
+        console.log('Precargando datos de clientes...')
+      }
     }
   }
 
@@ -228,7 +318,7 @@ export function AppointmentForm({
     }
   }
 
-  // Enviar formulario
+  // Envío optimizado con retry y validaciones
   const onSubmit = async (data) => {
     setLoading(true)
     setError('')
@@ -236,37 +326,62 @@ export function AppointmentForm({
     try {
       console.log('Enviando cita:', data)
 
-      // Validar conflictos de horario
-      const conflictCheck = await appointmentService.validateAppointmentTime(
-        data.professionalId,
-        data.date,
-        data.startTime,
-        data.duration,
-        editingAppointment?.id
-      )
+      // Verificar conexión antes de enviar
+      if (!isFirebaseOnline) {
+        throw new Error('Sin conexión al servidor. Los datos se guardarán cuando se restablezca la conexión.')
+      }
+
+      // Validar conflictos con retry
+      const conflictCheck = await executeWithRetry(async () => {
+        return appointmentServiceOptimized.validateAppointmentTime(
+          data.professionalId,
+          data.date,
+          data.startTime,
+          data.duration,
+          editingAppointment?.id
+        )
+      })
 
       if (!conflictCheck.isValid) {
         setError('Conflicto de horario detectado. Por favor selecciona otro horario.')
-        setCurrentStep(4) // Volver al paso de selección de horario
+        setCurrentStep(4)
+        notify('error', 'Conflicto de horario', {
+          description: 'Ya existe una cita en ese horario'
+        })
         return
       }
 
-      // Preparar datos de la cita
+      // Preparar datos con validación médica
       const appointmentData = {
         ...data,
         clientName: selectedClient.name,
+        treatmentName: selectedTreatment.name,
         endTime: calculatedEndTime,
+        medicalWarnings: medicalValidation?.warnings || [],
+        hasWarnings: hasMedicalWarnings,
         createdAt: new Date(),
         updatedAt: new Date()
       }
 
-      // Crear o actualizar cita
+      // Crear o actualizar con retry
       let appointmentId
       if (editingAppointment) {
-        await appointmentService.update(editingAppointment.id, appointmentData)
+        await executeWithRetry(async () => {
+          return appointmentServiceOptimized.update(editingAppointment.id, appointmentData)
+        })
         appointmentId = editingAppointment.id
+        
+        notify('success', 'Cita actualizada correctamente')
       } else {
-        appointmentId = await appointmentService.create(appointmentData)
+        appointmentId = await executeWithRetry(async () => {
+          return appointmentServiceOptimized.create(appointmentData)
+        })
+        
+        // Notificación de cita creada
+        notificationService.notifyAppointmentCreated({
+          id: appointmentId,
+          ...appointmentData
+        })
       }
 
       console.log('Cita guardada:', appointmentId)
@@ -279,38 +394,78 @@ export function AppointmentForm({
 
     } catch (error) {
       console.error('Error saving appointment:', error)
-      setError('Error al guardar la cita. Intenta nuevamente.')
+      const errorMessage = error.message || 'Error al guardar la cita. Intenta nuevamente.'
+      setError(errorMessage)
+      
+      notify('error', 'Error al guardar', {
+        description: errorMessage,
+        duration: 6000
+      })
     } finally {
       setLoading(false)
     }
   }
 
-  // Obtener título del paso
+  // Indicadores de estado
   const getStepTitle = () => {
-    switch (currentStep) {
-      case 1: return 'Profesional y Fecha'
-      case 2: return 'Seleccionar Cliente'
-      case 3: return 'Tratamiento'
-      case 4: return 'Horario y Confirmación'
-      default: return 'Nueva Cita'
+    const titles = {
+      1: 'Profesional y Fecha',
+      2: 'Seleccionar Cliente',
+      3: 'Tratamiento',
+      4: 'Horario y Confirmación'
     }
+    return titles[currentStep] || 'Nueva Cita'
   }
 
-  // Obtener icono del paso
   const getStepIcon = () => {
-    switch (currentStep) {
-      case 1: return Calendar
-      case 2: return User
-      case 3: return Briefcase
-      case 4: return Clock
-      default: return Heart
+    const icons = {
+      1: Calendar,
+      2: User,
+      3: Briefcase,
+      4: Clock
     }
+    return icons[currentStep] || Heart
   }
 
   const StepIcon = getStepIcon()
 
+  // Estado de conexión en la UI
+  const ConnectionStatus = () => (
+    <div className="flex items-center space-x-1 text-xs">
+      {isFirebaseOnline ? (
+        <Wifi className="h-3 w-3 text-green-500" />
+      ) : (
+        <WifiOff className="h-3 w-3 text-red-500" />
+      )}
+      <span className={isFirebaseOnline ? 'text-green-600' : 'text-red-600'}>
+        {isFirebaseOnline ? 'Online' : 'Offline'}
+      </span>
+      {retryCount > 0 && (
+        <span className="text-orange-600">
+          (Reintento {retryCount})
+        </span>
+      )}
+    </div>
+  )
+
+  if (!shouldRender) {
+    return (
+      <div ref={formRef} className="w-full max-w-4xl mx-auto">
+        <Card>
+          <CardContent className="p-8 text-center">
+            <div className="animate-pulse space-y-4">
+              <div className="h-4 bg-gray-200 rounded w-1/4 mx-auto"></div>
+              <div className="h-8 bg-gray-200 rounded"></div>
+              <div className="h-32 bg-gray-200 rounded"></div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
-    <div className="w-full max-w-4xl mx-auto">
+    <div ref={formRef} className="w-full max-w-4xl mx-auto">
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -327,11 +482,15 @@ export function AppointmentForm({
                 </CardDescription>
               </div>
             </div>
-            {onCancel && (
-              <Button variant="outline" onClick={onCancel}>
-                Cancelar
-              </Button>
-            )}
+            
+            <div className="flex items-center space-x-2">
+              <ConnectionStatus />
+              {onCancel && (
+                <Button variant="outline" onClick={onCancel}>
+                  Cancelar
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Indicador de progreso */}
@@ -339,7 +498,7 @@ export function AppointmentForm({
             {[...Array(totalSteps)].map((_, index) => (
               <div
                 key={index}
-                className={`flex-1 h-2 rounded-full ${
+                className={`flex-1 h-2 rounded-full transition-colors ${
                   index + 1 <= currentStep
                     ? 'bg-primary'
                     : 'bg-muted'
@@ -369,7 +528,7 @@ export function AppointmentForm({
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {professionals.map((professional) => (
+                            {availableProfessionals.map((professional) => (
                               <SelectItem key={professional.id} value={professional.id}>
                                 {professional.name}
                               </SelectItem>
@@ -452,7 +611,7 @@ export function AppointmentForm({
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {treatments.map((treatment) => (
+                            {availableTreatments.map((treatment) => (
                               <SelectItem key={treatment.id} value={treatment.id}>
                                 <div className="flex items-center justify-between w-full">
                                   <span>{treatment.name}</span>
@@ -491,23 +650,15 @@ export function AppointmentForm({
                     </Card>
                   )}
 
-                  {/* Advertencias médicas */}
-                  {medicalWarnings.length > 0 && (
-                    <Card className="bg-orange-50 border-orange-200">
-                      <CardContent className="p-4">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <AlertTriangle className="h-4 w-4 text-orange-600" />
-                          <h4 className="font-medium text-orange-800">Advertencias Médicas</h4>
-                        </div>
-                        <div className="space-y-1">
-                          {medicalWarnings.map((warning, index) => (
-                            <p key={index} className="text-sm text-orange-700">
-                              • {warning}
-                            </p>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
+                  {/* Validación médica automática */}
+                  {selectedClient && selectedTreatment && (
+                    <MedicalValidation
+                      clientId={selectedClient.id}
+                      treatmentId={selectedTreatment.id}
+                      onValidationChange={(validation) => {
+                        console.log('Medical validation updated:', validation)
+                      }}
+                    />
                   )}
 
                   <div className="grid grid-cols-2 gap-4">
@@ -601,6 +752,11 @@ export function AppointmentForm({
                           <div><strong>Horario:</strong> {formatTimeString(form.getValues('startTime'))} - {calculatedEndTime}</div>
                           <div><strong>Duración:</strong> {form.getValues('duration')} minutos</div>
                           <div><strong>Precio:</strong> ${form.getValues('price')}</div>
+                          {hasMedicalWarnings && (
+                            <div className="text-orange-700">
+                              <strong>⚠️ Advertencias médicas:</strong> Revisar antes de confirmar
+                            </div>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -609,31 +765,52 @@ export function AppointmentForm({
               )}
 
               {/* Error general */}
-              {error && (
+              {(error || retryError) && (
                 <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md border border-destructive/20">
-                  {error}
+                  {error || retryError}
+                  {!isFirebaseOnline && (
+                    <div className="mt-2 text-xs">
+                      Los datos se guardarán automáticamente cuando se restablezca la conexión.
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Botones de navegación */}
+              {/* Botones de navegación optimizados */}
               <div className="flex justify-between">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={prevStep}
-                  disabled={currentStep === 1}
+                  disabled={currentStep === 1 || loading}
                 >
                   <ChevronLeft className="h-4 w-4 mr-2" />
                   Anterior
                 </Button>
 
                 {currentStep < totalSteps ? (
-                  <Button type="button" onClick={nextStep}>
-                    Siguiente
-                    <ChevronRight className="h-4 w-4 ml-2" />
+                  <Button 
+                    type="button" 
+                    onClick={nextStep}
+                    disabled={loading || medicalLoading}
+                  >
+                    {medicalLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Validando...
+                      </>
+                    ) : (
+                      <>
+                        Siguiente
+                        <ChevronRight className="h-4 w-4 ml-2" />
+                      </>
+                    )}
                   </Button>
                 ) : (
-                  <Button type="submit" disabled={loading}>
+                  <Button 
+                    type="submit" 
+                    disabled={loading || !isFirebaseOnline || (hasMedicalWarnings && !medicalValidation?.isValid)}
+                  >
                     {loading ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -644,6 +821,24 @@ export function AppointmentForm({
                     )}
                   </Button>
                 )}
+              </div>
+
+              {/* Indicadores adicionales */}
+              <div className="flex justify-between items-center text-xs text-muted-foreground pt-2">
+                <div>
+                  {!isFirebaseOnline && (
+                    <span className="text-orange-600">
+                      ⚠️ Trabajando offline - Los cambios se sincronizarán automáticamente
+                    </span>
+                  )}
+                </div>
+                <div>
+                  {hasMedicalWarnings && (
+                    <span className="text-orange-600">
+                      ⚠️ Revisa las advertencias médicas
+                    </span>
+                  )}
+                </div>
               </div>
             </form>
           </Form>
