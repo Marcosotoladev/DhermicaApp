@@ -3,746 +3,457 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuthState } from 'react-firebase-hooks/auth'
-import { auth } from '../../../lib/firebase'
-import { 
-  Plus, 
-  Search, 
-  Edit, 
-  Trash2, 
-  Eye, 
-  Clock, 
-  DollarSign, 
-  Tag, 
-  ArrowLeft,
-  Filter,
-  Grid3X3,
-  List,
-  Bell,
-  LogOut,
-  AlertCircle,
-  MoreVertical,
-  X,
-  TrendingUp,
-  Award,
-  AlertTriangle
-} from 'lucide-react'
+import { Plus, ArrowLeft, Edit, Trash2, Search, Grid, List, Filter, Eye, Clock, DollarSign, Tag, Image as ImageIcon } from 'lucide-react'
 import { Button } from '../../../components/ui/button'
-import { Input } from '../../../components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card'
 import { Badge } from '../../../components/ui/badge'
-import { Avatar, AvatarFallback, AvatarImage } from '../../../components/ui/avatar'
+import { Input } from '../../../components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select'
-import { Skeleton } from '../../../components/ui/skeleton'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '../../../components/ui/sheet'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../../components/ui/dropdown-menu'
+import { Switch } from '../../../components/ui/switch'
+import { Separator } from '../../../components/ui/separator'
 import { treatmentService } from '../../../lib/firebase-services'
 import { formatDuration } from '../../../lib/time-utils'
-import { TREATMENT_CATEGORIES } from '../../../lib/validations'
+import { toast } from 'sonner'
 
 /**
- * Página de gestión de tratamientos - Enhanced Mobile First
- * Consistente con el diseño del dashboard admin
+ * Página de gestión de tratamientos
+ * Lista completa con filtros y búsqueda
  */
 export default function TreatmentsPage() {
   const router = useRouter()
-  const [user, loading, error] = useAuthState(auth)
   const [treatments, setTreatments] = useState([])
   const [filteredTreatments, setFilteredTreatments] = useState([])
-  const [loadingData, setLoadingData] = useState(true)
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState('all')
-  const [viewMode, setViewMode] = useState('grid') // grid | list
-  const [showFilters, setShowFilters] = useState(false)
-  const [showStats, setShowStats] = useState(false)
+  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [viewMode, setViewMode] = useState('grid') // 'grid' | 'list'
+  const [showInactive, setShowInactive] = useState(false)
+
+  // Categorías disponibles
+  const categories = [
+    'Facial',
+    'Corporal',
+    'Depilación',
+    'Rejuvenecimiento',
+    'Limpieza',
+    'Hidratación',
+    'Masajes'
+  ]
 
   useEffect(() => {
-    if (user) {
-      loadTreatments()
-    }
-  }, [user])
+    loadTreatments()
+  }, [showInactive])
 
   useEffect(() => {
     filterTreatments()
-  }, [treatments, searchTerm, selectedCategory])
+  }, [treatments, searchTerm, categoryFilter])
 
   const loadTreatments = async () => {
-    setLoadingData(true)
+    setLoading(true)
     try {
-      const data = await treatmentService.getAll()
-      setTreatments(data)
+      const treatmentsData = await treatmentService.getAll()
+      
+      // Filtrar por estado activo/inactivo
+      const filtered = showInactive 
+        ? treatmentsData 
+        : treatmentsData.filter(t => t.active !== false)
+      
+      setTreatments(filtered)
     } catch (error) {
       console.error('Error loading treatments:', error)
+      toast.error('Error al cargar tratamientos')
     } finally {
-      setLoadingData(false)
+      setLoading(false)
     }
   }
 
   const filterTreatments = () => {
-    let filtered = treatments
+    let filtered = [...treatments]
 
+    // Filtro por búsqueda
     if (searchTerm) {
+      const search = searchTerm.toLowerCase()
       filtered = filtered.filter(treatment =>
-        treatment.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        treatment.description.toLowerCase().includes(searchTerm.toLowerCase())
+        treatment.name.toLowerCase().includes(search) ||
+        treatment.description.toLowerCase().includes(search) ||
+        treatment.category.toLowerCase().includes(search)
       )
     }
 
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter(treatment => treatment.category === selectedCategory)
+    // Filtro por categoría
+    if (categoryFilter !== 'all') {
+      filtered = filtered.filter(treatment => treatment.category === categoryFilter)
     }
 
     setFilteredTreatments(filtered)
   }
 
-  const handleDelete = async (id) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar este tratamiento?')) {
+  const handleDelete = async (id, name) => {
+    if (window.confirm(`¿Estás seguro de que quieres eliminar el tratamiento "${name}"?`)) {
       try {
         await treatmentService.delete(id)
+        toast.success('Tratamiento eliminado exitosamente')
         await loadTreatments()
       } catch (error) {
         console.error('Error deleting treatment:', error)
+        toast.error('Error al eliminar el tratamiento')
       }
     }
   }
 
-  const handleSignOut = async () => {
+  const toggleActive = async (id, currentStatus) => {
     try {
-      await auth.signOut()
-      router.push('/login')
+      await treatmentService.update(id, { active: !currentStatus })
+      toast.success(`Tratamiento ${!currentStatus ? 'activado' : 'desactivado'} exitosamente`)
+      await loadTreatments()
     } catch (error) {
-      console.error('Error signing out:', error)
+      console.error('Error updating treatment status:', error)
+      toast.error('Error al actualizar el estado')
     }
   }
 
-  const getCategoryColor = (category) => {
-    const colors = {
-      'Facial': 'bg-blue-100 text-blue-800 border-blue-200',
-      'Corporal': 'bg-green-100 text-green-800 border-green-200',
-      'Depilación': 'bg-purple-100 text-purple-800 border-purple-200',
-      'Rejuvenecimiento': 'bg-pink-100 text-pink-800 border-pink-200',
-      'Limpieza': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      'Hidratación': 'bg-cyan-100 text-cyan-800 border-cyan-200',
-      'Masajes': 'bg-orange-100 text-orange-800 border-orange-200'
-    }
-    return colors[category] || 'bg-gray-100 text-gray-800 border-gray-200'
-  }
-
-  const getCategoryStats = () => {
-    const stats = {}
-    treatments.forEach(treatment => {
-      stats[treatment.category] = (stats[treatment.category] || 0) + 1
-    })
-    return stats
-  }
-
-  const calculateAveragePrice = () => {
-    if (treatments.length === 0) return 0
-    return Math.round(treatments.reduce((sum, t) => sum + t.basePrice, 0) / treatments.length)
-  }
-
-  const getTreatmentsWithRestrictions = () => {
-    return treatments.filter(t => t.medicalRestrictions && t.medicalRestrictions.length > 0).length
-  }
-
-  const getMostExpensive = () => {
-    if (treatments.length === 0) return null
-    return treatments.reduce((max, treatment) => 
-      treatment.basePrice > max.basePrice ? treatment : max
-    )
-  }
-
-  const categoryStats = getCategoryStats()
-  const averagePrice = calculateAveragePrice()
-  const treatmentsWithRestrictions = getTreatmentsWithRestrictions()
-  const mostExpensive = getMostExpensive()
-
-  // Loading state
-  if (loading || loadingData) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-        <div className="border-b border-border/50 sticky top-0 z-10 backdrop-blur-sm bg-card/95">
-          <div className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center space-x-3">
-                <Skeleton className="h-8 w-8 rounded" />
-                <div>
-                  <Skeleton className="h-6 w-40 mb-1" />
-                  <Skeleton className="h-4 w-32" />
-                </div>
-              </div>
-              <div className="flex space-x-2">
-                <Skeleton className="h-8 w-8 rounded" />
-                <Skeleton className="h-8 w-8 rounded" />
-                <Skeleton className="h-8 w-8 rounded" />
-              </div>
+      <div className="min-h-screen bg-background p-4 sm:p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="animate-pulse space-y-6">
+            <div className="h-8 bg-muted rounded w-1/4"></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-64 bg-muted rounded"></div>
+              ))}
             </div>
-            <Skeleton className="h-10 w-full mb-3" />
-            <Skeleton className="h-10 w-full" />
           </div>
         </div>
-        <div className="p-4 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Skeleton className="h-24 rounded-xl" />
-            <Skeleton className="h-24 rounded-xl" />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {[...Array(6)].map((_, i) => (
-              <Skeleton key={i} className="h-48 rounded-xl" />
-            ))}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Error state
-  if (error || !user) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 flex items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6 text-center">
-            <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
-            <p className="text-destructive mb-4">
-              {error ? `Error: ${error.message}` : 'Acceso no autorizado'}
-            </p>
-            <Button onClick={() => router.push('/login')}>
-              Ir al login
-            </Button>
-          </CardContent>
-        </Card>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      
-      {/* Header mobile-optimized - Enhanced */}
-      <div className="border-b border-border/50 sticky top-0 z-10 backdrop-blur-sm bg-card/95">
-        <div className="p-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-3 flex-1 min-w-0">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.push('/admin/dashboard')}
-                className="flex-shrink-0"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-              <div className="min-w-0 flex-1">
-                <h1 className="text-xl font-bold text-foreground truncate">
-                  Tratamientos 💆‍♀️
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  {filteredTreatments.length} de {treatments.length} tratamientos
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-2 flex-shrink-0">
-              {/* Mobile Stats */}
-              <Sheet open={showStats} onOpenChange={setShowStats}>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="sm" className="sm:hidden">
-                    <TrendingUp className="h-4 w-4" />
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="bottom" className="h-[70vh]">
-                  <SheetHeader>
-                    <SheetTitle>Estadísticas de Tratamientos</SheetTitle>
-                  </SheetHeader>
-                  <div className="space-y-6 mt-6">
-                    <div className="grid grid-cols-2 gap-4">
-                      <Card>
-                        <CardContent className="p-4 text-center">
-                          <Tag className="h-6 w-6 text-primary mx-auto mb-2" />
-                          <p className="text-2xl font-bold">{treatments.length}</p>
-                          <p className="text-xs text-muted-foreground">Total</p>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="p-4 text-center">
-                          <DollarSign className="h-6 w-6 text-green-600 mx-auto mb-2" />
-                          <p className="text-lg font-bold">${averagePrice.toLocaleString()}</p>
-                          <p className="text-xs text-muted-foreground">Precio promedio</p>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="p-4 text-center">
-                          <AlertTriangle className="h-6 w-6 text-warning mx-auto mb-2" />
-                          <p className="text-2xl font-bold">{treatmentsWithRestrictions}</p>
-                          <p className="text-xs text-muted-foreground">Con restricciones</p>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="p-4 text-center">
-                          <Award className="h-6 w-6 text-purple-600 mx-auto mb-2" />
-                          <p className="text-lg font-bold">${mostExpensive?.basePrice?.toLocaleString() || '0'}</p>
-                          <p className="text-xs text-muted-foreground">Más caro</p>
-                        </CardContent>
-                      </Card>
-                    </div>
-                    
-                    <div>
-                      <h4 className="font-medium mb-3">Por Categoría</h4>
-                      <div className="space-y-2">
-                        {Object.entries(categoryStats).map(([category, count]) => (
-                          <div key={category} className="flex items-center justify-between p-2 bg-muted rounded">
-                            <Badge className={`${getCategoryColor(category)} text-xs`}>
-                              {category}
-                            </Badge>
-                            <span className="text-sm font-medium">{count}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </SheetContent>
-              </Sheet>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-              >
-                {viewMode === 'grid' ? <List className="h-4 w-4" /> : <Grid3X3 className="h-4 w-4" />}
-              </Button>
-              
-              {/* Mobile Filters */}
-              <Sheet open={showFilters} onOpenChange={setShowFilters}>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="sm" className="sm:hidden">
-                    <Filter className="h-4 w-4" />
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="right">
-                  <SheetHeader>
-                    <SheetTitle>Filtros</SheetTitle>
-                    <SheetDescription>
-                      Personaliza la vista de tratamientos
-                    </SheetDescription>
-                  </SheetHeader>
-                  <div className="space-y-4 mt-6">
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">
-                        Categoría
-                      </label>
-                      <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Todas las categorías" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todas las categorías</SelectItem>
-                          {TREATMENT_CATEGORIES.map(category => (
-                            <SelectItem key={category} value={category}>
-                              {category}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">
-                        Vista
-                      </label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button
-                          variant={viewMode === 'grid' ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => setViewMode('grid')}
-                          className="justify-start"
-                        >
-                          <Grid3X3 className="h-4 w-4 mr-2" />
-                          Grilla
-                        </Button>
-                        <Button
-                          variant={viewMode === 'list' ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => setViewMode('list')}
-                          className="justify-start"
-                        >
-                          <List className="h-4 w-4 mr-2" />
-                          Lista
-                        </Button>
-                      </div>
-                    </div>
-
-                    {(searchTerm || selectedCategory !== 'all') && (
-                      <div className="pt-4 border-t">
-                        <Button 
-                          variant="outline" 
-                          onClick={() => {
-                            setSearchTerm('')
-                            setSelectedCategory('all')
-                          }}
-                          className="w-full"
-                        >
-                          <X className="h-4 w-4 mr-2" />
-                          Limpiar filtros
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </SheetContent>
-              </Sheet>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="hidden sm:flex">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem>
-                    <Bell className="h-4 w-4 mr-2" />
-                    Notificaciones
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleSignOut}>
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Cerrar sesión
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-
-          {/* Mobile Search */}
-          <div className="space-y-3 sm:hidden">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-              <Input
-                placeholder="Buscar tratamientos..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 bg-background"
-              />
-            </div>
-          </div>
-
-          {/* Desktop Filters */}
-          <div className="hidden sm:flex space-y-3">
-            <div className="flex space-x-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                <Input
-                  placeholder="Buscar tratamientos..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-background"
-                />
-              </div>
-              
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger className="w-48 bg-background">
-                  <SelectValue placeholder="Todas las categorías" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas las categorías</SelectItem>
-                  {TREATMENT_CATEGORIES.map(category => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Contenido principal */}
-      <div className="p-4 space-y-6">
+    <div className="min-h-screen bg-background">
+      <div className="max-w-7xl mx-auto p-4 sm:p-6">
         
-        {/* Estadísticas compactas - Mobile */}
-        <div className="grid grid-cols-2 gap-4 sm:hidden">
-          <Card>
-            <CardContent className="p-4 text-center">
-              <div className="flex flex-col items-center space-y-2">
-                <div className="p-3 bg-primary/10 rounded-full">
-                  <Tag className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-xl font-bold">{treatments.length}</p>
-                  <p className="text-xs text-muted-foreground">Tratamientos</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 text-center">
-              <div className="flex flex-col items-center space-y-2">
-                <div className="p-3 bg-green-100 rounded-full">
-                  <DollarSign className="h-5 w-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-lg font-bold">
-                    ${averagePrice.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Precio promedio</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push('/admin/dashboard')}
+              className="px-2 sm:px-3"
+            >
+              <ArrowLeft className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Dashboard</span>
+            </Button>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
+                Tratamientos
+              </h1>
+              <p className="text-sm sm:text-base text-muted-foreground">
+                Gestiona los servicios de Dhermica
+              </p>
+            </div>
+          </div>
+          
+          <Button 
+            onClick={() => router.push('/admin/treatments/new')}
+            size="sm"
+            className="px-3 sm:px-4"
+          >
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Nuevo Tratamiento</span>
+          </Button>
         </div>
 
-        {/* Desktop Statistics */}
-        <div className="hidden sm:grid grid-cols-2 md:grid-cols-4 gap-6">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-2">
-                <Tag className="h-5 w-5 text-primary" />
-                <div>
-                  <p className="text-2xl font-bold">{treatments.length}</p>
-                  <p className="text-xs text-muted-foreground">Total tratamientos</p>
+        {/* Filtros y controles */}
+        <Card className="mb-6">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex flex-col space-y-4 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between">
+              
+              {/* Búsqueda y filtros */}
+              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 flex-1">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar tratamientos..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
                 </div>
+                
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <SelectTrigger className="w-full sm:w-48">
+                    <SelectValue placeholder="Todas las categorías" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas las categorías</SelectItem>
+                    {categories.map(category => (
+                      <SelectItem key={category} value={category}>
+                        {category}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-            </CardContent>
-          </Card>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-2">
-                <DollarSign className="h-5 w-5 text-green-600" />
-                <div>
-                  <p className="text-2xl font-bold">${averagePrice.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground">Precio promedio</p>
+              {/* Controles de vista */}
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    checked={showInactive}
+                    onCheckedChange={setShowInactive}
+                    id="show-inactive"
+                  />
+                  <label htmlFor="show-inactive" className="text-sm">
+                    Mostrar inactivos
+                  </label>
+                </div>
+                
+                <Separator orientation="vertical" className="h-6" />
+                
+                <div className="flex border border-border rounded-md">
+                  <Button
+                    variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode('grid')}
+                    className="rounded-r-none px-3"
+                  >
+                    <Grid className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant={viewMode === 'list' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode('list')}
+                    className="rounded-l-none px-3"
+                  >
+                    <List className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-2">
-                <AlertTriangle className="h-5 w-5 text-warning" />
-                <div>
-                  <p className="text-2xl font-bold">{treatmentsWithRestrictions}</p>
-                  <p className="text-xs text-muted-foreground">Con restricciones</p>
-                </div>
+            {/* Estadísticas */}
+            <div className="mt-4 pt-4 border-t">
+              <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                <span>Total: {treatments.length}</span>
+                <span>Mostrados: {filteredTreatments.length}</span>
+                <span>Activos: {treatments.filter(t => t.active !== false).length}</span>
+                {showInactive && (
+                  <span>Inactivos: {treatments.filter(t => t.active === false).length}</span>
+                )}
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-2">
-                <Award className="h-5 w-5 text-purple-600" />
-                <div>
-                  <p className="text-2xl font-bold">${mostExpensive?.basePrice?.toLocaleString() || '0'}</p>
-                  <p className="text-xs text-muted-foreground">Más costoso</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Lista de tratamientos */}
         {filteredTreatments.length > 0 ? (
-          viewMode === 'grid' ? (
-            /* Vista de grilla mobile enhanced */
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredTreatments.map((treatment) => (
-                <Card key={treatment.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between mb-3">
+          <div className={
+            viewMode === 'grid' 
+              ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+              : "space-y-4"
+          }>
+            {filteredTreatments.map(treatment => (
+              viewMode === 'grid' ? (
+                // Vista de tarjetas
+                <Card key={treatment.id} className={`hover:shadow-md transition-shadow ${treatment.active === false ? 'opacity-60' : ''}`}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between">
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-sm mb-2 line-clamp-2">
-                          {treatment.name}
-                        </h3>
-                        <Badge className={`${getCategoryColor(treatment.category)} text-xs border`}>
-                          {treatment.category}
-                        </Badge>
+                        <CardTitle className="text-lg truncate">{treatment.name}</CardTitle>
+                        <CardDescription className="flex items-center space-x-2 mt-1">
+                          <Badge variant="outline" className="text-xs">
+                            {treatment.category}
+                          </Badge>
+                          {treatment.active === false && (
+                            <Badge variant="destructive" className="text-xs">
+                              Inactivo
+                            </Badge>
+                          )}
+                        </CardDescription>
                       </div>
-                      {treatment.imageUrl && (
-                        <Avatar className="h-12 w-12 ml-3 flex-shrink-0">
-                          <AvatarImage src={treatment.imageUrl} alt={treatment.name} />
-                          <AvatarFallback className="text-sm">
-                            {treatment.name.charAt(0)}
-                          </AvatarFallback>
-                        </Avatar>
+                    </div>
+                  </CardHeader>
+                  
+                  <CardContent className="space-y-4">
+                    {/* Imagen */}
+                    <div className="aspect-video bg-muted rounded-lg flex items-center justify-center overflow-hidden">
+                      {treatment.imageUrl ? (
+                        <img 
+                          src={treatment.imageUrl} 
+                          alt={treatment.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <ImageIcon className="h-8 w-8 text-muted-foreground" />
                       )}
                     </div>
                     
-                    <p className="text-xs text-muted-foreground line-clamp-2 mb-3">
+                    {/* Descripción */}
+                    <p className="text-sm text-muted-foreground line-clamp-2">
                       {treatment.description}
                     </p>
                     
-                    <div className="flex items-center justify-between text-xs mb-3">
+                    {/* Detalles */}
+                    <div className="grid grid-cols-2 gap-2 text-sm">
                       <div className="flex items-center space-x-1">
-                        <Clock className="h-3 w-3 text-muted-foreground" />
+                        <Clock className="h-4 w-4 text-muted-foreground" />
                         <span>{formatDuration(treatment.duration)}</span>
                       </div>
                       <div className="flex items-center space-x-1">
-                        <DollarSign className="h-3 w-3 text-muted-foreground" />
-                        <span className="font-semibold text-green-600">${treatment.basePrice.toLocaleString()}</span>
+                        <DollarSign className="h-4 w-4 text-muted-foreground" />
+                        <span>${treatment.basePrice}</span>
                       </div>
                     </div>
                     
+                    {/* Restricciones médicas */}
                     {treatment.medicalRestrictions && treatment.medicalRestrictions.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mb-3">
-                        {treatment.medicalRestrictions.slice(0, 2).map((restriction) => (
-                          <Badge key={restriction} variant="outline" className="text-xs border-warning text-warning">
-                            ⚠️ {restriction}
+                      <div className="flex flex-wrap gap-1">
+                        {treatment.medicalRestrictions.slice(0, 2).map((restriction, index) => (
+                          <Badge key={index} variant="secondary" className="text-xs">
+                            {restriction}
                           </Badge>
                         ))}
                         {treatment.medicalRestrictions.length > 2 && (
-                          <Badge variant="outline" className="text-xs">
-                            +{treatment.medicalRestrictions.length - 2}
+                          <Badge variant="secondary" className="text-xs">
+                            +{treatment.medicalRestrictions.length - 2} más
                           </Badge>
                         )}
                       </div>
                     )}
                     
-                    {/* Desktop Actions */}
-                    <div className="hidden sm:flex items-center justify-between pt-3 border-t border-border">
+                    {/* Acciones */}
+                    <div className="flex space-x-2 pt-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        className="text-xs"
                         onClick={() => router.push(`/admin/treatments/${treatment.id}`)}
+                        className="flex-1"
                       >
-                        <Eye className="h-3 w-3 mr-1" />
+                        <Eye className="h-4 w-4 mr-2" />
                         Ver
                       </Button>
-                      <div className="flex space-x-1">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => router.push(`/admin/treatments/${treatment.id}/edit`)}
-                        >
-                          <Edit className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDelete(treatment.id)}
-                          className="text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Mobile Actions */}
-                    <div className="sm:hidden pt-3 border-t border-border">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="sm" className="w-full">
-                            <MoreVertical className="h-4 w-4 mr-2" />
-                            Acciones
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem onClick={() => router.push(`/admin/treatments/${treatment.id}`)}>
-                            <Eye className="h-4 w-4 mr-2" />
-                            Ver detalles
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => router.push(`/admin/treatments/${treatment.id}/edit`)}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Editar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={() => handleDelete(treatment.id)}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Eliminar
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => router.push(`/admin/treatments/editar/${treatment.id}`)}
+                        className="flex-1"
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Editar
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
-              ))}
-            </div>
-          ) : (
-            /* Vista de lista mobile enhanced */
-            <div className="space-y-3">
-              {filteredTreatments.map((treatment) => (
-                <Card key={treatment.id} className="hover:shadow-sm transition-shadow">
+              ) : (
+                // Vista de lista
+                <Card key={treatment.id} className={`hover:shadow-sm transition-shadow ${treatment.active === false ? 'opacity-60' : ''}`}>
                   <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3 flex-1 min-w-0">
-                        {treatment.imageUrl && (
-                          <Avatar className="h-12 w-12 flex-shrink-0">
-                            <AvatarImage src={treatment.imageUrl} alt={treatment.name} />
-                            <AvatarFallback className="text-sm">
-                              {treatment.name.charAt(0)}
-                            </AvatarFallback>
-                          </Avatar>
+                    <div className="flex items-start space-x-4">
+                      {/* Imagen pequeña */}
+                      <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        {treatment.imageUrl ? (
+                          <img 
+                            src={treatment.imageUrl} 
+                            alt={treatment.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <ImageIcon className="h-6 w-6 text-muted-foreground" />
                         )}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-2 mb-1">
-                            <h3 className="font-medium text-sm truncate">{treatment.name}</h3>
-                            <Badge className={`${getCategoryColor(treatment.category)} text-xs border flex-shrink-0`}>
-                              {treatment.category}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center space-x-4 text-xs text-muted-foreground">
-                            <div className="flex items-center space-x-1">
-                              <Clock className="h-3 w-3" />
-                              <span>{formatDuration(treatment.duration)}</span>
-                            </div>
-                            <div className="flex items-center space-x-1">
-                              <DollarSign className="h-3 w-3" />
-                              <span className="font-semibold text-green-600">${treatment.basePrice.toLocaleString()}</span>
-                            </div>
-                          </div>
-                          {treatment.medicalRestrictions && treatment.medicalRestrictions.length > 0 && (
-                            <div className="mt-1">
-                              <Badge variant="outline" className="text-xs border-warning text-warning">
-                                ⚠️ {treatment.medicalRestrictions.length} restricción{treatment.medicalRestrictions.length > 1 ? 'es' : ''}
+                      </div>
+                      
+                      {/* Contenido */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-lg truncate">{treatment.name}</h3>
+                            <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
+                              {treatment.description}
+                            </p>
+                            
+                            <div className="flex flex-wrap items-center gap-2 mt-2">
+                              <Badge variant="outline" className="text-xs">
+                                {treatment.category}
                               </Badge>
+                              {treatment.active === false && (
+                                <Badge variant="destructive" className="text-xs">
+                                  Inactivo
+                                </Badge>
+                              )}
+                              <div className="flex items-center space-x-3 text-xs text-muted-foreground">
+                                <div className="flex items-center space-x-1">
+                                  <Clock className="h-3 w-3" />
+                                  <span>{formatDuration(treatment.duration)}</span>
+                                </div>
+                                <div className="flex items-center space-x-1">
+                                  <DollarSign className="h-3 w-3" />
+                                  <span>${treatment.basePrice}</span>
+                                </div>
+                              </div>
                             </div>
-                          )}
+                          </div>
+                          
+                          {/* Acciones */}
+                          <div className="flex space-x-1 ml-4">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => router.push(`/admin/treatments/${treatment.id}`)}
+                              className="px-2"
+                              title="Ver detalles"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => router.push(`/admin/treatments/editar/${treatment.id}`)}
+                              className="px-2"
+                              title="Editar tratamiento"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDelete(treatment.id, treatment.name)}
+                              className="text-destructive hover:text-destructive px-2"
+                              title="Eliminar tratamiento"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="flex-shrink-0">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem onClick={() => router.push(`/admin/treatments/${treatment.id}`)}>
-                            <Eye className="h-4 w-4 mr-2" />
-                            Ver detalles
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => router.push(`/admin/treatments/${treatment.id}/edit`)}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Editar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={() => handleDelete(treatment.id)}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Eliminar
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
                     </div>
                   </CardContent>
                 </Card>
-              ))}
-            </div>
-          )
+              )
+            ))}
+          </div>
         ) : (
+          // Estado vacío
           <Card>
-            <CardContent className="p-8 text-center">
-              <Tag className="h-8 sm:h-12 w-8 sm:w-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-base sm:text-lg font-medium mb-2">No se encontraron tratamientos</h3>
-              <p className="text-muted-foreground mb-4 text-sm">
-                {searchTerm || selectedCategory !== 'all' 
-                  ? 'Prueba ajustando los filtros de búsqueda'
-                  : 'Comienza agregando tu primer tratamiento'
+            <CardContent className="p-12 text-center">
+              <div className="mx-auto w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-4">
+                <Tag className="h-12 w-12 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">
+                {searchTerm || categoryFilter !== 'all' 
+                  ? 'No se encontraron tratamientos'
+                  : 'No hay tratamientos'
+                }
+              </h3>
+              <p className="text-muted-foreground mb-4 max-w-md mx-auto">
+                {searchTerm || categoryFilter !== 'all'
+                  ? 'Intenta cambiar los filtros de búsqueda'
+                  : 'Comienza agregando tu primer tratamiento para ofrecer servicios a tus clientes'
                 }
               </p>
-              {(!searchTerm && selectedCategory === 'all') && (
-                <Button onClick={() => router.push('/admin/treatments/new')} size="sm">
+              {(!searchTerm && categoryFilter === 'all') && (
+                <Button onClick={() => router.push('/admin/treatments/new')}>
                   <Plus className="h-4 w-4 mr-2" />
                   Crear Primer Tratamiento
                 </Button>
@@ -750,20 +461,6 @@ export default function TreatmentsPage() {
             </CardContent>
           </Card>
         )}
-
-        {/* Botón flotante para nuevo tratamiento */}
-        <div className="fixed bottom-6 right-6 z-50">
-          <Button 
-            size="lg"
-            className="rounded-full shadow-lg h-14 w-14 p-0 bg-primary hover:bg-primary/90"
-            onClick={() => router.push('/admin/treatments/new')}
-          >
-            <Plus className="h-6 w-6" />
-          </Button>
-        </div>
-
-        {/* Espaciado inferior para el botón flotante */}
-        <div className="h-20"></div>
       </div>
     </div>
   )
