@@ -1,4 +1,4 @@
-// src/components/ui/birth-date-picker.js
+// src/components/ui/birth-date-picker.jsx
 'use client'
 
 import { useState } from 'react'
@@ -48,9 +48,12 @@ export function BirthDatePicker({ value, onChange, placeholder = "Selecciona tu 
         parsedDate <= new Date() &&
         parsedDate >= new Date(1924, 0, 1)
       ) {
-        onChange(parsedDate)
-        setIsOpen(false)
-        setManualDate('')
+        // ✅ Verificar que onChange existe antes de llamarla
+        if (onChange && typeof onChange === 'function') {
+          onChange(parsedDate)
+          setIsOpen(false)
+          setManualDate('')
+        }
       }
     }
   }
@@ -161,7 +164,8 @@ export function BirthDatePicker({ value, onChange, placeholder = "Selecciona tu 
               mode="single"
               selected={value}
               onSelect={(date) => {
-                if (date) {
+                // ✅ Verificar que date y onChange existen antes de llamarla
+                if (date && onChange && typeof onChange === 'function') {
                   onChange(date)
                   setIsOpen(false)
                 }

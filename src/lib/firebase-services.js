@@ -357,7 +357,27 @@ export const professionalService = {
       console.error('Error updating professional:', error)
       throw error
     }
+  },
+
+
+  /**
+ * Eliminar profesional con invalidación de caché
+ */
+async delete(id) {
+  try {
+    const docRef = doc(db, 'professionals', id)
+    await updateDoc(docRef, {
+      available: false,
+      updatedAt: serverTimestamp()
+    })
+    
+    // Invalidar caché
+    optimizationUtils.invalidateCache(['professionals:', `professional:${id}`])
+  } catch (error) {
+    console.error('Error deleting professional:', error)
+    throw error
   }
+}
 }
 
 /**
@@ -482,7 +502,101 @@ export const clientService = {
       console.error('Error updating client:', error)
       throw error
     }
+  },
+
+
+  // AÑADE ESTE MÉTODO AL clientService en firebase-services.js
+// Agregar después del método search() existente:
+
+/**
+ * Obtener todos los clientes con caché
+ */
+async getAll(useCache = true) {
+  const cacheKey = 'clients:all'
+  
+  if (!useCache) {
+    cache.delete(cacheKey)
   }
+
+  return optimizationUtils.withCache(
+    cacheKey,
+    async () => {
+      try {
+        const querySnapshot = await getDocs(
+          query(
+            collection(db, 'clients'),
+            orderBy('name'),
+            limit(200) // Limitar para performance
+          )
+        )
+        
+        return querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+      } catch (error) {
+        console.error('Error getting all clients:', error)
+        throw error
+      }
+    },
+    10 * 60 * 1000 // 10 minutos TTL
+  )
+},
+
+
+/**
+ * Búsqueda de clientes con debounce y caché
+ */
+async search(searchTerm, useCache = true) {
+  // Si no hay término de búsqueda, obtener todos los clientes
+  if (!searchTerm || searchTerm.trim() === '') {
+    return this.getAll(useCache)
+  }
+
+  // No cachear búsquedas muy cortas
+  if (searchTerm.length < 2) {
+    return []
+  }
+
+  const cacheKey = `clients:search:${searchTerm.toLowerCase()}`
+  
+  if (!useCache) {
+    cache.delete(cacheKey)
+  }
+
+  return optimizationUtils.withCache(
+    cacheKey,
+    async () => {
+      try {
+        // Obtener todos los clientes (con límite)
+        const querySnapshot = await getDocs(
+          query(
+            collection(db, 'clients'),
+            orderBy('name'),
+            limit(200) // Limitar para performance
+          )
+        )
+        
+        const clients = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+        
+        // Filtrar en el cliente para mejor performance
+        const searchLower = searchTerm.toLowerCase()
+        return clients.filter(client =>
+          client.name?.toLowerCase().includes(searchLower) ||
+          client.phone?.includes(searchTerm) ||
+          client.email?.toLowerCase().includes(searchLower)
+        )
+      } catch (error) {
+        console.error('Error searching clients:', error)
+        throw error
+      }
+    },
+    2 * 60 * 1000 // 2 minutos TTL para búsquedas
+  )
+},
 }
 
 /**

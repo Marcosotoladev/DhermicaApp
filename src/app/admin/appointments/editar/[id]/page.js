@@ -1,7 +1,7 @@
 // src/app/admin/appointments/editar/[id]/page.js
 'use client'
 
-import { useState, useEffect } from 'react'
+import { use, useState, useEffect } from 'react'   // 👈 agregado use
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Save, Eye, AlertTriangle, Loader2 } from 'lucide-react'
 import { Button } from '../../../../../components/ui/button'
@@ -17,6 +17,10 @@ import { toast } from 'sonner'
  */
 export default function EditAppointmentPage({ params }) {
   const router = useRouter()
+
+  // ✅ resolver params correctamente
+  const { id } = use(params)
+
   const [appointment, setAppointment] = useState(null)
   const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -25,14 +29,14 @@ export default function EditAppointmentPage({ params }) {
 
   useEffect(() => {
     loadAppointment()
-  }, [params.id])
+  }, [id])
 
   const loadAppointment = async () => {
     setLoading(true)
     setError(null)
     
     try {
-      const appointmentData = await appointmentService.getById(params.id)
+      const appointmentData = await appointmentService.getById(id)
       
       if (!appointmentData) {
         setError('Cita no encontrada')
@@ -54,14 +58,14 @@ export default function EditAppointmentPage({ params }) {
     setValidationErrors([])
 
     try {
-      await appointmentService.update(params.id, appointmentData)
+      await appointmentService.update(id, appointmentData)
       
       toast.success('Cita actualizada exitosamente', {
         description: `Cita de ${appointmentData.clientName} actualizada`
       })
 
       // Redirigir a la vista de detalles
-      router.push(`/admin/appointments/${params.id}`)
+      router.push(`/admin/appointments/${id}`)
       
     } catch (error) {
       console.error('Error updating appointment:', error)
@@ -83,12 +87,12 @@ export default function EditAppointmentPage({ params }) {
 
   const handleCancel = () => {
     if (window.confirm('¿Estás seguro de que quieres cancelar? Se perderán los cambios no guardados.')) {
-      router.push(`/admin/appointments/${params.id}`)
+      router.push(`/admin/appointments/${id}`)
     }
   }
 
   const viewDetails = () => {
-    router.push(`/admin/appointments/${params.id}`)
+    router.push(`/admin/appointments/${id}`)
   }
 
   if (loading) {
@@ -117,7 +121,7 @@ export default function EditAppointmentPage({ params }) {
               <ArrowLeft className="h-4 w-4 mr-2" />
               Volver a Citas
             </Button>
-            {params.id && (
+            {id && (
               <Button variant="outline" onClick={viewDetails}>
                 <Eye className="h-4 w-4 mr-2" />
                 Ver Detalles

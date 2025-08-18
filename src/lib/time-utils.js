@@ -65,14 +65,16 @@ export function formatDateTime(date) {
   return formatDate(date, 'dd/MM/yyyy HH:mm')
 }
 
-/**
- * Formatea solo la hora de una fecha
- * @param {Date|string|any} date 
- * @returns {string}
- */
 export function formatTime(date) {
+  // Si es un string tipo "09:00", devolverlo sin tocar
+  if (typeof date === 'string' && /^\d{1,2}:\d{2}$/.test(date)) {
+    return formatTimeString(date)
+  }
+
+  // Si es un Date o Timestamp válido
   return formatDate(date, 'HH:mm')
 }
+
 
 /**
  * Formatea hora desde string (ej: "14:30")

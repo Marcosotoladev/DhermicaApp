@@ -2,23 +2,24 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import { ArrowLeft, Edit, Trash2, Calendar, User, Clock, Briefcase, DollarSign, Phone, Mail, AlertTriangle, Loader2 } from 'lucide-react'
 import { Button } from '../../../../components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../../components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '../../../../components/ui/card'
 import { Badge } from '../../../../components/ui/badge'
 import { Separator } from '../../../../components/ui/separator'
 import { Alert, AlertDescription } from '../../../../components/ui/alert'
 import { appointmentService, clientService, professionalService, treatmentService } from '../../../../lib/firebase-services'
-import { formatDate, formatTime, formatDuration } from '../../../../lib/time-utils'
+import { formatDate, formatDuration } from '../../../../lib/time-utils'
 import { toast } from 'sonner'
 
 /**
  * Página para ver detalles de una cita (solo lectura)
  * Vista completa con toda la información de la cita
  */
-export default function AppointmentDetailPage({ params }) {
+export default function AppointmentDetailPage() {
   const router = useRouter()
+  const params = useParams() // 👈 Importante: obtener el id desde aquí
   const [appointment, setAppointment] = useState(null)
   const [client, setClient] = useState(null)
   const [professional, setProfessional] = useState(null)
@@ -28,16 +29,18 @@ export default function AppointmentDetailPage({ params }) {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    loadAppointmentDetails()
-  }, [params.id])
+    if (params?.id) {
+      loadAppointmentDetails(params.id)
+    }
+  }, [params?.id])
 
-  const loadAppointmentDetails = async () => {
+  const loadAppointmentDetails = async (id) => {
     setLoading(true)
     setError(null)
     
     try {
       // Cargar la cita
-      const appointmentData = await appointmentService.getById(params.id)
+      const appointmentData = await appointmentService.getById(id)
       
       if (!appointmentData) {
         setError('Cita no encontrada')
@@ -188,11 +191,10 @@ export default function AppointmentDetailPage({ params }) {
           </div>
         </div>
 
+        {/* Contenido */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
           {/* Información Principal */}
           <div className="lg:col-span-2 space-y-6">
-            
             {/* Resumen de la Cita */}
             <Card>
               <CardHeader>
@@ -206,7 +208,7 @@ export default function AppointmentDetailPage({ params }) {
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Fecha</p>
                     <p className="text-lg font-semibold">
-                      {formatDate(appointmentDate, 'EEEE d \'de\' MMMM \'de\' yyyy')}
+                      {formatDate(appointmentDate, "EEEE d 'de' MMMM 'de' yyyy")}
                     </p>
                   </div>
                   <div>
@@ -257,7 +259,7 @@ export default function AppointmentDetailPage({ params }) {
                       </div>
                     </div>
                     
-                    {/* Información médica si existe */}
+                    {/* Información médica */}
                     {client.medicalInfo && (
                       <div className="pt-4 border-t">
                         <p className="text-sm font-medium text-muted-foreground mb-2">Información Médica</p>
@@ -343,7 +345,6 @@ export default function AppointmentDetailPage({ params }) {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            
             {/* Profesional */}
             <Card>
               <CardHeader>

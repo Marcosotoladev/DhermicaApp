@@ -654,7 +654,7 @@ export default function ProfessionalsPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => router.push(`/admin/professionals/${professional.id}/edit`)}
+                          onClick={() => router.push(`/admin/professionals/editar/${professional.id}`)}
                         >
                           <Edit className="h-3 w-3" />
                         </Button>
@@ -683,7 +683,7 @@ export default function ProfessionalsPage() {
                             <Eye className="h-4 w-4 mr-2" />
                             Ver perfil
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => router.push(`/admin/professionals/${professional.id}/edit`)}>
+                          <DropdownMenuItem onClick={() => router.push(`/admin/professionals/editar/${professional.id}`)}>
                             <Edit className="h-4 w-4 mr-2" />
                             Editar
                           </DropdownMenuItem>
@@ -781,7 +781,7 @@ export default function ProfessionalsPage() {
                               <Eye className="h-4 w-4 mr-2" />
                               Ver perfil
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => router.push(`/admin/professionals/${professional.id}/edit`)}>
+                            <DropdownMenuItem onClick={() => router.push(`/admin/professionals/editar/${professional.id}`)}>
                               <Edit className="h-4 w-4 mr-2" />
                               Editar
                             </DropdownMenuItem>

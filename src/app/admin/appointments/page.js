@@ -29,13 +29,71 @@ export default function AppointmentsPage() {
   const [showCalendar, setShowCalendar] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
 
-  useEffect(() => {
-    loadInitialData()
-  }, [])
+  // Carga inicial de profesionales y tratamientos
+useEffect(() => {
+  const loadInitialData = async () => {
+    setLoading(true)
+    try {
+      const [professionalsData, treatmentsData] = await Promise.all([
+        professionalService.getAll(),
+        treatmentService.getAll()
+      ])
+      setProfessionals(professionalsData)
+      setTreatments(treatmentsData)
+    } catch (error) {
+      console.error('Error loading initial data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  useEffect(() => {
+  loadInitialData()
+}, [])
+
+// Carga de citas, depende también de profesionales y tratamientos
+useEffect(() => {
+  const loadAppointments = async () => {
+    setLoading(true)
+    try {
+      let appointmentsData
+
+      if (selectedProfessional === 'all') {
+        appointmentsData = await appointmentService.getByDate(selectedDate)
+      } else {
+        appointmentsData = await appointmentService.getByProfessionalAndDate(
+          selectedProfessional,
+          selectedDate
+        )
+      }
+
+      // 👀 Debug en consola para ver qué trae Firestore
+      console.log("📅 Citas crudas desde Firestore:", appointmentsData)
+
+      const enrichedAppointments = appointmentsData.map(appointment => ({
+        ...appointment,
+        professional: professionals.find(p => p.id === appointment.professionalId),
+        treatment: treatments.find(t => t.id === appointment.treatmentId)
+      }))
+
+      // 👀 Debug en consola para ver las citas ya enriquecidas
+      console.log("✨ Citas enriquecidas:", enrichedAppointments)
+
+      setAppointments(enrichedAppointments)
+    } catch (error) {
+      console.error('❌ Error loading appointments:', error)
+      setAppointments([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ⚡ Solo carga si ya tenemos profesionales y tratamientos
+  if (professionals.length > 0 && treatments.length > 0) {
     loadAppointments()
-  }, [selectedDate, selectedProfessional])
+  }
+}, [selectedDate, selectedProfessional, professionals, treatments])
+
+
 
   const loadInitialData = async () => {
     try {
