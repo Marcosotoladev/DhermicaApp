@@ -60,8 +60,6 @@ export default function AdminDashboard() {
     nextAppointment: null
   })
   const [todayAppointments, setTodayAppointments] = useState([])
-  const [recentClients, setRecentClients] = useState([])
-  const [topTreatments, setTopTreatments] = useState([])
   const [loadingData, setLoadingData] = useState(true)
   const [dataError, setDataError] = useState('')
   const [currentTime, setCurrentTime] = useState(new Date())
@@ -122,22 +120,6 @@ export default function AdminDashboard() {
         ])
         clients = clientsData
         treatments = treatmentsData
-        
-        // Clientes recientes (últimos 5)
-        const sortedClients = clients
-          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-          .slice(0, 5)
-        setRecentClients(sortedClients)
-        
-        // Tratamientos más populares (simulado por ahora)
-        const popularTreatments = treatments
-          .slice(0, 4)
-          .map(treatment => ({
-            ...treatment,
-            bookings: Math.floor(Math.random() * 50) + 10 // Simulado
-          }))
-          .sort((a, b) => b.bookings - a.bookings)
-        setTopTreatments(popularTreatments)
         
       } catch (statsError) {
         console.warn('Error cargando estadísticas:', statsError)
@@ -238,13 +220,6 @@ export default function AdminDashboard() {
       icon: UserCheck,
       href: '/admin/professionals',
       color: 'bg-orange-500 text-white'
-    },
-    {
-      title: 'Reportes',
-      description: 'Ver estadísticas',
-      icon: BarChart3,
-      href: '/admin/reports',
-      color: 'bg-indigo-500 text-white'
     }
   ]
 
@@ -264,23 +239,21 @@ export default function AdminDashboard() {
             </div>
           </div>
           
-          {/* Stats skeleton */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => (
+          {/* Quick actions skeleton */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            {[...Array(5)].map((_, i) => (
               <Skeleton key={i} className="h-24 lg:h-32 rounded-xl" />
             ))}
           </div>
           
           {/* Content skeleton */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-              <Skeleton className="h-32 rounded-xl" />
-              <Skeleton className="h-64 rounded-xl" />
-            </div>
-            <div className="space-y-6">
-              <Skeleton className="h-40 rounded-xl" />
-              <Skeleton className="h-48 rounded-xl" />
-            </div>
+          <Skeleton className="h-64 rounded-xl" />
+          
+          {/* Stats skeleton */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <Skeleton key={i} className="h-24 lg:h-32 rounded-xl" />
+            ))}
           </div>
         </div>
       </div>
@@ -376,296 +349,209 @@ export default function AdminDashboard() {
       {/* Contenido principal */}
       <div className="max-w-7xl mx-auto p-4 lg:p-6 space-y-6">
         
-        {/* Métricas principales - Grid responsivo */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Citas de hoy */}
-          <Card className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground border-0">
-            <CardContent className="p-4 lg:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-primary-foreground/80 text-xs lg:text-sm font-medium mb-1">
-                    Citas Hoy
-                  </p>
-                  <p className="text-2xl lg:text-3xl font-bold">{stats.todayAppointments}</p>
-                  <p className="text-xs lg:text-sm text-primary-foreground/80">
-                    {stats.pendingAppointments} pendientes
-                  </p>
-                </div>
-                <Calendar className="h-8 w-8 lg:h-10 lg:w-10 text-primary-foreground/60" />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Ingresos del día */}
-          <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white border-0">
-            <CardContent className="p-4 lg:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-white/80 text-xs lg:text-sm font-medium mb-1">
-                    Ingresos Hoy
-                  </p>
-                  <p className="text-xl lg:text-2xl font-bold">
-                    ${stats.todayRevenue.toLocaleString()}
-                  </p>
-                  <p className="text-xs lg:text-sm text-white/80">
-                    {stats.completedToday} completadas
-                  </p>
-                </div>
-                <DollarSign className="h-8 w-8 lg:h-10 lg:w-10 text-white/60" />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Total clientes */}
-          <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0">
-            <CardContent className="p-4 lg:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-white/80 text-xs lg:text-sm font-medium mb-1">
-                    Clientes
-                  </p>
-                  <p className="text-xl lg:text-2xl font-bold">{stats.totalClients}</p>
-                  <p className="text-xs lg:text-sm text-white/80">
-                    Total registrados
-                  </p>
-                </div>
-                <Users className="h-8 w-8 lg:h-10 lg:w-10 text-white/60" />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Tratamientos */}
-          <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0">
-            <CardContent className="p-4 lg:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-white/80 text-xs lg:text-sm font-medium mb-1">
-                    Servicios
-                  </p>
-                  <p className="text-xl lg:text-2xl font-bold">{stats.totalTreatments}</p>
-                  <p className="text-xs lg:text-sm text-white/80">
-                    Disponibles
-                  </p>
-                </div>
-                <Briefcase className="h-8 w-8 lg:h-10 lg:w-10 text-white/60" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Layout responsivo principal */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Columna principal - 2/3 en desktop */}
-          <div className="lg:col-span-2 space-y-6">
-            
-            {/* Acciones rápidas */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg lg:text-xl">Acciones Rápidas</CardTitle>
-                <CardDescription>Funciones principales del sistema</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
-                  {quickActions.map((action) => (
-                    <Button
-                      key={action.title}
-                      variant="outline"
-                      className={`h-auto p-4 lg:p-6 flex flex-col items-center space-y-2 lg:space-y-3 border-2 transition-all ${
-                        action.urgent ? 'border-primary/50 bg-primary/5' : 'hover:border-primary/30'
-                      }`}
-                      onClick={() => router.push(action.href)}
-                    >
-                      <div className={`p-2 lg:p-3 rounded-lg ${action.color}`}>
-                        <action.icon className="h-5 w-5 lg:h-6 lg:w-6" />
-                      </div>
-                      <div className="text-center">
-                        <p className="font-medium text-sm lg:text-base">{action.title}</p>
-                        <p className="text-xs lg:text-sm text-muted-foreground">{action.description}</p>
-                      </div>
-                    </Button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Citas del día */}
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-lg lg:text-xl">Agenda de Hoy</CardTitle>
-                    <CardDescription>
-                      {todayAppointments.length} citas programadas
-                    </CardDescription>
+        {/* Acciones rápidas - Movidas al inicio */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg lg:text-xl">Acciones Rápidas</CardTitle>
+            <CardDescription>Funciones principales del sistema</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4">
+              {quickActions.map((action) => (
+                <Button
+                  key={action.title}
+                  variant="outline"
+                  className={`h-auto p-4 lg:p-6 flex flex-col items-center space-y-2 lg:space-y-3 border-2 transition-all ${
+                    action.urgent ? 'border-primary/50 bg-primary/5' : 'hover:border-primary/30'
+                  }`}
+                  onClick={() => router.push(action.href)}
+                >
+                  <div className={`p-2 lg:p-3 rounded-lg ${action.color}`}>
+                    <action.icon className="h-5 w-5 lg:h-6 lg:w-6" />
                   </div>
-                  {todayAppointments.length > 0 && (
-                    <Button variant="ghost" size="sm" onClick={() => router.push('/admin/appointments')}>
-                      <Eye className="h-4 w-4 mr-2" />
-                      Ver todas
-                    </Button>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                {todayAppointments.length > 0 ? (
-                  <div className="space-y-3">
-                    {todayAppointments.slice(0, 6).map((appointment) => {
-                      const timeStatus = getTimeStatus(appointment)
-                      
-                      return (
-                        <div
-                          key={appointment.id}
-                          className="flex items-center justify-between p-3 lg:p-4 bg-muted/30 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer"
-                          onClick={() => router.push(`/admin/appointments/${appointment.id}`)}
-                        >
-                          <div className="flex items-center space-x-3 lg:space-x-4">
-                            <div className="text-center">
-                              <p className="text-lg lg:text-xl font-bold text-primary">
-                                {formatTimeString(appointment.startTime)}
-                              </p>
-                              <p className="text-xs lg:text-sm text-muted-foreground">
-                                {appointment.duration || 60}min
-                              </p>
-                            </div>
-                            <div>
-                              <p className="font-medium text-sm lg:text-base">{appointment.clientName}</p>
-                              <p className="text-xs lg:text-sm text-muted-foreground">
-                                {appointment.treatmentId || 'Tratamiento'}
-                              </p>
-                              {appointment.price && (
-                                <p className="text-xs lg:text-sm font-medium text-green-600">
-                                  ${appointment.price.toLocaleString()}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <Badge className={`text-xs ${timeStatus.color} border-0 mb-2`}>
-                              {timeStatus.label}
-                            </Badge>
-                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                          </div>
-                        </div>
-                      )
-                    })}
+                  <div className="text-center">
+                    <p className="font-medium text-sm lg:text-base">{action.title}</p>
+                    <p className="text-xs lg:text-sm text-muted-foreground">{action.description}</p>
                   </div>
-                ) : (
-                  <div className="text-center py-8 lg:py-12">
-                    <Calendar className="h-12 w-12 lg:h-16 lg:w-16 mx-auto text-muted-foreground mb-3" />
-                    <h3 className="font-medium mb-2 lg:text-lg">No hay citas para hoy</h3>
-                    <p className="text-sm lg:text-base text-muted-foreground mb-4">
-                      Comienza agendando la primera cita del día
-                    </p>
-                    <Button onClick={() => router.push('/admin/appointments/new')}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Nueva Cita
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Sidebar derecho - 1/3 en desktop */}
-          <div className="space-y-6">
-            
-            {/* Métricas adicionales - Solo desktop */}
-            <div className="hidden lg:block">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg">Resumen Financiero</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Ingresos Semana</span>
-                    <span className="font-medium">${stats.weekRevenue.toLocaleString()}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Ingresos Mes</span>
-                    <span className="font-medium">${stats.monthRevenue.toLocaleString()}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Promedio por Cita</span>
-                    <span className="font-medium">
-                      ${stats.todayAppointments > 0 ? Math.round(stats.todayRevenue / stats.todayAppointments).toLocaleString() : '0'}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
+                </Button>
+              ))}
             </div>
+          </CardContent>
+        </Card>
 
-            {/* Clientes recientes */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Clientes Recientes</CardTitle>
-                <CardDescription>Últimos registros</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {recentClients.length > 0 ? (
-                  <div className="space-y-3">
-                    {recentClients.map((client) => (
-                      <div
-                        key={client.id}
-                        className="flex items-center space-x-3 p-3 hover:bg-muted/50 rounded-lg transition-colors cursor-pointer"
-                        onClick={() => router.push(`/admin/clients/${client.id}`)}
-                      >
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback className="text-xs">
-                            {client.name?.charAt(0)?.toUpperCase() || 'C'}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{client.name}</p>
-                          <p className="text-xs text-muted-foreground truncate">{client.phone}</p>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    No hay clientes recientes
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Tratamientos populares */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Servicios Populares</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {topTreatments.length > 0 ? (
-                  <div className="space-y-3">
-                    {topTreatments.map((treatment, index) => (
-                      <div
-                        key={treatment.id}
-                        className="flex items-center space-x-3 p-3 hover:bg-muted/50 rounded-lg transition-colors"
-                      >
-                        <div className="flex items-center justify-center w-6 h-6 bg-primary/10 rounded-full">
-                          <span className="text-xs font-bold text-primary">#{index + 1}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{treatment.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {treatment.bookings} reservas • ${treatment.basePrice}
+        {/* Citas del día - Ahora ocupa todo el ancho */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg lg:text-xl">Agenda de Hoy</CardTitle>
+                <CardDescription>
+                  {todayAppointments.length} citas programadas
+                </CardDescription>
+              </div>
+              {todayAppointments.length > 0 && (
+                <Button variant="ghost" size="sm" onClick={() => router.push('/admin/appointments')}>
+                  <Eye className="h-4 w-4 mr-2" />
+                  Ver todas
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {todayAppointments.length > 0 ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                {todayAppointments.map((appointment) => {
+                  const timeStatus = getTimeStatus(appointment)
+                  
+                  return (
+                    <div
+                      key={appointment.id}
+                      className="flex items-center justify-between p-3 lg:p-4 bg-muted/30 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer"
+                      onClick={() => router.push(`/admin/appointments/${appointment.id}`)}
+                    >
+                      <div className="flex items-center space-x-3 lg:space-x-4">
+                        <div className="text-center">
+                          <p className="text-lg lg:text-xl font-bold text-primary">
+                            {formatTimeString(appointment.startTime)}
+                          </p>
+                          <p className="text-xs lg:text-sm text-muted-foreground">
+                            {appointment.duration || 60}min
                           </p>
                         </div>
-                        <Star className="h-4 w-4 text-yellow-500" />
+                        <div>
+                          <p className="font-medium text-sm lg:text-base">{appointment.clientName}</p>
+                          <p className="text-xs lg:text-sm text-muted-foreground">
+                            {appointment.treatmentId || 'Tratamiento'}
+                          </p>
+                          {appointment.price && (
+                            <p className="text-xs lg:text-sm font-medium text-green-600">
+                              ${appointment.price.toLocaleString()}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    ))}
+                      <div className="text-right">
+                        <Badge className={`text-xs ${timeStatus.color} border-0 mb-2`}>
+                          {timeStatus.label}
+                        </Badge>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8 lg:py-12">
+                <Calendar className="h-12 w-12 lg:h-16 lg:w-16 mx-auto text-muted-foreground mb-3" />
+                <h3 className="font-medium mb-2 lg:text-lg">No hay citas para hoy</h3>
+                <p className="text-sm lg:text-base text-muted-foreground mb-4">
+                  Comienza agendando la primera cita del día
+                </p>
+                <Button onClick={() => router.push('/admin/appointments/new')}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nueva Cita
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Métricas principales - Movidas al final */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg lg:text-xl">Resumen del Día</CardTitle>
+            <CardDescription>Estadísticas principales</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Citas de hoy */}
+              <div className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground p-4 lg:p-6 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-primary-foreground/80 text-xs lg:text-sm font-medium mb-1">
+                      Citas Hoy
+                    </p>
+                    <p className="text-2xl lg:text-3xl font-bold">{stats.todayAppointments}</p>
+                    <p className="text-xs lg:text-sm text-primary-foreground/80">
+                      {stats.pendingAppointments} pendientes
+                    </p>
                   </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Cargando estadísticas...
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+                  <Calendar className="h-8 w-8 lg:h-10 lg:w-10 text-primary-foreground/60" />
+                </div>
+              </div>
+
+              {/* Ingresos del día */}
+              <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-4 lg:p-6 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-white/80 text-xs lg:text-sm font-medium mb-1">
+                      Ingresos Hoy
+                    </p>
+                    <p className="text-xl lg:text-2xl font-bold">
+                      ${stats.todayRevenue.toLocaleString()}
+                    </p>
+                    <p className="text-xs lg:text-sm text-white/80">
+                      {stats.completedToday} completadas
+                    </p>
+                  </div>
+                  <DollarSign className="h-8 w-8 lg:h-10 lg:w-10 text-white/60" />
+                </div>
+              </div>
+
+              {/* Total clientes */}
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-4 lg:p-6 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-white/80 text-xs lg:text-sm font-medium mb-1">
+                      Clientes
+                    </p>
+                    <p className="text-xl lg:text-2xl font-bold">{stats.totalClients}</p>
+                    <p className="text-xs lg:text-sm text-white/80">
+                      Total registrados
+                    </p>
+                  </div>
+                  <Users className="h-8 w-8 lg:h-10 lg:w-10 text-white/60" />
+                </div>
+              </div>
+
+              {/* Tratamientos */}
+              <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-4 lg:p-6 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-white/80 text-xs lg:text-sm font-medium mb-1">
+                      Servicios
+                    </p>
+                    <p className="text-xl lg:text-2xl font-bold">{stats.totalTreatments}</p>
+                    <p className="text-xs lg:text-sm text-white/80">
+                      Disponibles
+                    </p>
+                  </div>
+                  <Briefcase className="h-8 w-8 lg:h-10 lg:w-10 text-white/60" />
+                </div>
+              </div>
+            </div>
+
+            {/* Métricas adicionales */}
+            <div className="mt-6 pt-6 border-t border-border/50">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Ingresos Semana</span>
+                  <span className="font-medium">${stats.weekRevenue.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Ingresos Mes</span>
+                  <span className="font-medium">${stats.monthRevenue.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Promedio por Cita</span>
+                  <span className="font-medium">
+                    ${stats.todayAppointments > 0 ? Math.round(stats.todayRevenue / stats.todayAppointments).toLocaleString() : '0'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Botón flotante - Solo móvil */}
         <div className="fixed bottom-6 right-6 lg:hidden">
