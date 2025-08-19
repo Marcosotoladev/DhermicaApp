@@ -3,19 +3,21 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Calendar as CalendarIcon, List, ChevronLeft, ChevronRight, Clock, User, Briefcase, ArrowLeft, Edit, Trash2, Filter, X, Eye } from 'lucide-react'
+import { Plus, Calendar as CalendarIcon, List, ChevronLeft, ChevronRight, Clock, User, Briefcase, ArrowLeft, Edit, Trash2, Filter, X, Eye, Check, AlertTriangle } from 'lucide-react'
 import { Button } from '../../../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card'
 import { Badge } from '../../../components/ui/badge'
 import { Calendar } from '../../../components/ui/calendar'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '../../../components/ui/sheet'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../../components/ui/dropdown-menu'
 import { appointmentService, professionalService, treatmentService } from '../../../lib/firebase-services'
 import { formatDate, formatTime, formatDateTime } from '../../../lib/time-utils'
+import { toast } from 'sonner'
 
 /**
  * Página de gestión de citas
- * Vista de calendario y lista de todas las citas - Optimizada para móvil
+ * Vista de calendario y lista con cambio de estados - Optimizada para móvil
  */
 export default function AppointmentsPage() {
   const router = useRouter()
@@ -24,39 +26,92 @@ export default function AppointmentsPage() {
   const [treatments, setTreatments] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState(new Date())
-  const [viewMode, setViewMode] = useState('list') // Cambiado a 'list' por defecto para móvil
+  const [viewMode, setViewMode] = useState('calendar') // Cambiado a 'calendar' por defecto
   const [selectedProfessional, setSelectedProfessional] = useState('all')
   const [showCalendar, setShowCalendar] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
 
   // Carga inicial de profesionales y tratamientos
-useEffect(() => {
-  const loadInitialData = async () => {
-    setLoading(true)
-    try {
-      const [professionalsData, treatmentsData] = await Promise.all([
-        professionalService.getAll(),
-        treatmentService.getAll()
-      ])
-      setProfessionals(professionalsData)
-      setTreatments(treatmentsData)
-    } catch (error) {
-      console.error('Error loading initial data:', error)
-    } finally {
-      setLoading(false)
+  useEffect(() => {
+    const loadInitialData = async () => {
+      setLoading(true)
+      try {
+        const [professionalsData, treatmentsData] = await Promise.all([
+          professionalService.getAll(),
+          treatmentService.getAll()
+        ])
+        setProfessionals(professionalsData)
+        setTreatments(treatmentsData)
+      } catch (error) {
+        console.error('Error loading initial data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadInitialData()
+  }, [])
+
+  // Carga de citas
+  useEffect(() => {
+    const loadAppointments = async () => {
+      setLoading(true)
+      try {
+        let appointmentsData
+
+        if (selectedProfessional === 'all') {
+          appointmentsData = await appointmentService.getByDate(selectedDate)
+        } else {
+          appointmentsData = await appointmentService.getByProfessionalAndDate(
+            selectedProfessional,
+            selectedDate
+          )
+        }
+
+        const enrichedAppointments = appointmentsData.map(appointment => ({
+          ...appointment,
+          professional: professionals.find(p => p.id === appointment.professionalId),
+          treatment: treatments.find(t => t.id === appointment.treatmentId),
+          // Soporte para múltiples tratamientos
+          treatmentsList: appointment.treatments || (appointment.treatmentId ? [{
+            id: appointment.treatmentId,
+            name: appointment.treatment?.name || 'Tratamiento eliminado'
+          }] : [])
+        }))
+
+        setAppointments(enrichedAppointments)
+      } catch (error) {
+        console.error('❌ Error loading appointments:', error)
+        setAppointments([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (professionals.length > 0 && treatments.length > 0) {
+      loadAppointments()
+    }
+  }, [selectedDate, selectedProfessional, professionals, treatments])
+
+  const handleDeleteAppointment = async (id) => {
+    if (window.confirm('¿Estás seguro de que quieres eliminar esta cita?')) {
+      try {
+        await appointmentService.delete(id)
+        toast.success('Cita eliminada exitosamente')
+        
+        // Recargar citas después de eliminar
+        await reloadAppointments()
+      } catch (error) {
+        console.error('Error deleting appointment:', error)
+        toast.error('Error al eliminar la cita')
+      }
     }
   }
 
-  loadInitialData()
-}, [])
-
-// Carga de citas, depende también de profesionales y tratamientos
-useEffect(() => {
-  const loadAppointments = async () => {
-    setLoading(true)
+  // Función para recargar citas (reutilizable)
+  const reloadAppointments = async () => {
     try {
       let appointmentsData
-
       if (selectedProfessional === 'all') {
         appointmentsData = await appointmentService.getByDate(selectedDate)
       } else {
@@ -66,86 +121,43 @@ useEffect(() => {
         )
       }
 
-      // 👀 Debug en consola para ver qué trae Firestore
-      console.log("📅 Citas crudas desde Firestore:", appointmentsData)
-
       const enrichedAppointments = appointmentsData.map(appointment => ({
         ...appointment,
         professional: professionals.find(p => p.id === appointment.professionalId),
-        treatment: treatments.find(t => t.id === appointment.treatmentId)
+        treatment: treatments.find(t => t.id === appointment.treatmentId),
+        treatmentsList: appointment.treatments || (appointment.treatmentId ? [{
+          id: appointment.treatmentId,
+          name: appointment.treatment?.name || 'Tratamiento eliminado'
+        }] : [])
       }))
-
-      // 👀 Debug en consola para ver las citas ya enriquecidas
-      console.log("✨ Citas enriquecidas:", enrichedAppointments)
 
       setAppointments(enrichedAppointments)
     } catch (error) {
-      console.error('❌ Error loading appointments:', error)
-      setAppointments([])
-    } finally {
-      setLoading(false)
+      console.error('Error reloading appointments:', error)
     }
   }
 
-  // ⚡ Solo carga si ya tenemos profesionales y tratamientos
-  if (professionals.length > 0 && treatments.length > 0) {
-    loadAppointments()
-  }
-}, [selectedDate, selectedProfessional, professionals, treatments])
-
-
-
-  const loadInitialData = async () => {
+  const handleChangeStatus = async (appointmentId, newStatus, appointmentName) => {
     try {
-      const [professionalsData, treatmentsData] = await Promise.all([
-        professionalService.getAll(),
-        treatmentService.getAll()
-      ])
-      setProfessionals(professionalsData)
-      setTreatments(treatmentsData)
+      await appointmentService.update(appointmentId, { status: newStatus })
+      toast.success(`Cita de ${appointmentName} marcada como ${newStatus.toLowerCase()}`)
+      
+      // Recargar citas usando la función reutilizable
+      await reloadAppointments()
     } catch (error) {
-      console.error('Error loading initial data:', error)
+      console.error('Error updating appointment status:', error)
+      toast.error('Error al actualizar el estado')
     }
   }
 
-  const loadAppointments = async () => {
-    setLoading(true)
-    try {
-      let appointmentsData
-      
-      if (selectedProfessional === 'all') {
-        appointmentsData = await appointmentService.getByDate(selectedDate)
-      } else {
-        appointmentsData = await appointmentService.getByProfessionalAndDate(
-          selectedProfessional, 
-          selectedDate
-        )
-      }
-      
-      // Enriquecer con datos de profesionales y tratamientos
-      const enrichedAppointments = appointmentsData.map(appointment => ({
-        ...appointment,
-        professional: professionals.find(p => p.id === appointment.professionalId),
-        treatment: treatments.find(t => t.id === appointment.treatmentId)
-      }))
-      
-      setAppointments(enrichedAppointments)
-    } catch (error) {
-      console.error('Error loading appointments:', error)
-      setAppointments([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleDeleteAppointment = async (id) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar esta cita?')) {
-      try {
-        await appointmentService.delete(id)
-        await loadAppointments()
-      } catch (error) {
-        console.error('Error deleting appointment:', error)
-      }
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'Completado':
+        return <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">Completado</Badge>
+      case 'Anulado':
+        return <Badge variant="destructive">Anulado</Badge>
+      default:
+        return <Badge variant="default">Programado</Badge>
     }
   }
 
@@ -285,16 +297,16 @@ useEffect(() => {
                     <Filter className="h-4 w-4" />
                   </Button>
                 </SheetTrigger>
-                <SheetContent side="right">
-                  <SheetHeader>
+                <SheetContent side="right" className="w-80 p-6">
+                  <SheetHeader className="mb-6">
                     <SheetTitle>Filtros</SheetTitle>
                     <SheetDescription>
                       Personaliza la vista de citas
                     </SheetDescription>
                   </SheetHeader>
-                  <div className="mt-6 space-y-4">
+                  <div className="space-y-6">
                     <div>
-                      <label className="text-sm font-medium mb-2 block">
+                      <label className="text-sm font-medium mb-3 block">
                         Profesional
                       </label>
                       <Select value={selectedProfessional} onValueChange={setSelectedProfessional}>
@@ -313,27 +325,33 @@ useEffect(() => {
                     </div>
                     
                     <div>
-                      <label className="text-sm font-medium mb-2 block">
+                      <label className="text-sm font-medium mb-3 block">
                         Vista
                       </label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button
-                          variant={viewMode === 'list' ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => setViewMode('list')}
-                          className="justify-start"
-                        >
-                          <List className="h-4 w-4 mr-2" />
-                          Lista
-                        </Button>
+                      <div className="grid grid-cols-1 gap-3">
                         <Button
                           variant={viewMode === 'calendar' ? 'default' : 'outline'}
                           size="sm"
                           onClick={() => setViewMode('calendar')}
-                          className="justify-start"
+                          className="justify-start h-12"
                         >
-                          <CalendarIcon className="h-4 w-4 mr-2" />
-                          Horarios
+                          <CalendarIcon className="h-4 w-4 mr-3" />
+                          <div className="text-left">
+                            <p className="font-medium">Horarios</p>
+                            <p className="text-xs text-muted-foreground">Vista por horas del día</p>
+                          </div>
+                        </Button>
+                        <Button
+                          variant={viewMode === 'list' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setViewMode('list')}
+                          className="justify-start h-12"
+                        >
+                          <List className="h-4 w-4 mr-3" />
+                          <div className="text-left">
+                            <p className="font-medium">Lista</p>
+                            <p className="text-xs text-muted-foreground">Vista compacta</p>
+                          </div>
                         </Button>
                       </div>
                     </div>
@@ -435,12 +453,12 @@ useEffect(() => {
             {/* Vista principal */}
             <div className="col-span-1 lg:col-span-3">
               {viewMode === 'calendar' ? (
-                // Vista de calendario/horarios
+                // Vista de calendario/horarios - MEJORADA
                 <Card>
                   <CardHeader>
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <CardTitle className="text-lg sm:text-xl">
-                        Citas del {formatDate(selectedDate, 'dd/MM/yyyy')}
+                        Agenda del {formatDate(selectedDate, 'dd/MM/yyyy')}
                       </CardTitle>
                       <Badge variant="outline">
                         {appointments.length} citas
@@ -451,78 +469,146 @@ useEffect(() => {
                     {appointments.length > 0 ? (
                       <div className="space-y-1">
                         {Object.entries(appointmentsByHour).map(([hour, hourAppointments]) => (
-                          <div key={hour} className="flex border-b border-border pb-2 mb-2 last:border-b-0">
-                            <div className="w-12 sm:w-16 text-xs sm:text-sm text-muted-foreground font-medium py-2 flex-shrink-0">
-                              {formatTime(hour)}
+                          <div key={hour} className="flex border-b border-border pb-3 mb-3 last:border-b-0">
+                            {/* HORA MÁS VISIBLE */}
+                            <div className="w-16 sm:w-20 text-center flex-shrink-0 mr-4">
+                              <div className="bg-primary/10 rounded-lg p-2">
+                                <p className="font-bold text-lg text-primary">
+                                  {formatTime(hour)}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {hour.split(':')[0]}:00
+                                </p>
+                              </div>
                             </div>
-                            <div className="flex-1 space-y-2 ml-2 sm:ml-0">
+                            
+                            {/* SEPARADOR VISUAL */}
+                            <div className="w-px bg-border mr-4 flex-shrink-0"></div>
+                            
+                            <div className="flex-1 space-y-3">
                               {hourAppointments.length > 0 ? (
                                 hourAppointments.map(appointment => (
                                   <div
                                     key={appointment.id}
-                                    className="bg-card border border-border rounded-lg p-2 sm:p-3 hover:shadow-sm transition-shadow"
+                                    className="bg-card border border-border rounded-lg p-3 sm:p-4 hover:shadow-md transition-all duration-200"
                                   >
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                       <div className="flex-1 min-w-0">
-                                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-1">
-                                          <Badge variant="outline" className="text-xs w-fit">
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <Badge variant="outline" className="text-xs font-medium">
                                             {formatTime(appointment.startTime)} - {formatTime(appointment.endTime)}
                                           </Badge>
-                                          <span className="font-medium text-sm sm:text-base truncate">
-                                            {appointment.clientName}
-                                          </span>
+                                          {getStatusBadge(appointment.status)}
                                         </div>
-                                        <div className="space-y-1 sm:flex sm:items-center sm:space-y-0 sm:space-x-4 text-xs sm:text-sm text-muted-foreground">
-                                          <div className="flex items-center space-x-1">
-                                            <Briefcase className="h-3 w-3 flex-shrink-0" />
-                                            <span className="truncate">{appointment.treatment?.name || 'Tratamiento eliminado'}</span>
+                                        
+                                        <div className="space-y-1">
+                                          <p className="font-semibold text-base truncate">
+                                            {appointment.clientName}
+                                          </p>
+                                          
+                                          {/* PROFESIONAL MÁS DESTACADO */}
+                                          <div className="flex items-center space-x-2 mb-1">
+                                            <User className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                                            <span className="font-bold text-base text-blue-700">
+                                              {appointment.professional?.name || 'Profesional eliminado'}
+                                            </span>
                                           </div>
-                                          <div className="flex items-center space-x-1">
-                                            <User className="h-3 w-3 flex-shrink-0" />
-                                            <span className="truncate">{appointment.professional?.name || 'Profesional eliminado'}</span>
+                                          
+                                          {/* Tratamientos */}
+                                          <div className="flex items-start space-x-2">
+                                            <Briefcase className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                            <div className="flex-1 min-w-0">
+                                              {appointment.treatmentsList && appointment.treatmentsList.length > 0 ? (
+                                                <div className="space-y-1">
+                                                  {appointment.treatmentsList.map((treatment, idx) => (
+                                                    <span key={treatment.id || idx} className="text-sm text-muted-foreground block">
+                                                      {treatment.name}
+                                                    </span>
+                                                  ))}
+                                                </div>
+                                              ) : (
+                                                <span className="text-sm text-muted-foreground">
+                                                  {appointment.treatment?.name || 'Tratamiento eliminado'}
+                                                </span>
+                                              )}
+                                            </div>
                                           </div>
-                                          {appointment.price && (
-                                            <Badge variant="secondary" className="text-xs w-fit">
-                                              ${appointment.price.toLocaleString()}
+                                          
+                                          {(appointment.totalPrice || appointment.price) && (
+                                            <Badge variant="secondary" className="text-xs mt-1 w-fit">
+                                              ${(appointment.totalPrice || appointment.price).toLocaleString()}
                                             </Badge>
                                           )}
                                         </div>
                                       </div>
-                                      <div className="flex space-x-1 flex-shrink-0">
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => router.push(`/admin/appointments/${appointment.id}`)}
-                                          className="px-2"
-                                          title="Ver detalles"
-                                        >
-                                          <Eye className="h-3 w-3" />
-                                        </Button>
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => router.push(`/admin/appointments/editar/${appointment.id}`)}
-                                          className="px-2"
-                                          title="Editar cita"
-                                        >
-                                          <Edit className="h-3 w-3" />
-                                        </Button>
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => handleDeleteAppointment(appointment.id)}
-                                          className="text-destructive hover:text-destructive px-2"
-                                          title="Eliminar cita"
-                                        >
-                                          <Trash2 className="h-3 w-3" />
-                                        </Button>
+                                      
+                                      <div className="flex flex-col sm:flex-row gap-1 flex-shrink-0">
+                                        {/* Cambio de estado */}
+                                        <DropdownMenu>
+                                          <DropdownMenuTrigger asChild>
+                                            <Button variant="outline" size="sm" className="w-full sm:w-auto">
+                                              <Check className="h-3 w-3 mr-1" />
+                                              Estado
+                                            </Button>
+                                          </DropdownMenuTrigger>
+                                          <DropdownMenuContent align="end">
+                                            <DropdownMenuItem 
+                                              onClick={() => handleChangeStatus(appointment.id, 'Programado', appointment.clientName)}
+                                              disabled={appointment.status === 'Programado'}
+                                            >
+                                              <Badge variant="default" className="mr-2">Programado</Badge>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem 
+                                              onClick={() => handleChangeStatus(appointment.id, 'Completado', appointment.clientName)}
+                                              disabled={appointment.status === 'Completado'}
+                                            >
+                                              <Badge variant="secondary" className="bg-green-100 text-green-800 mr-2">Completado</Badge>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem 
+                                              onClick={() => handleChangeStatus(appointment.id, 'Anulado', appointment.clientName)}
+                                              disabled={appointment.status === 'Anulado'}
+                                            >
+                                              <Badge variant="destructive" className="mr-2">Anulado</Badge>
+                                            </DropdownMenuItem>
+                                          </DropdownMenuContent>
+                                        </DropdownMenu>
+                                        
+                                        <div className="flex space-x-1">
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => router.push(`/admin/appointments/${appointment.id}`)}
+                                            className="px-2"
+                                            title="Ver detalles"
+                                          >
+                                            <Eye className="h-3 w-3" />
+                                          </Button>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => router.push(`/admin/appointments/editar/${appointment.id}`)}
+                                            className="px-2"
+                                            title="Editar cita"
+                                          >
+                                            <Edit className="h-3 w-3" />
+                                          </Button>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => handleDeleteAppointment(appointment.id)}
+                                            className="text-destructive hover:text-destructive px-2"
+                                            title="Eliminar cita"
+                                          >
+                                            <Trash2 className="h-3 w-3" />
+                                          </Button>
+                                        </div>
                                       </div>
                                     </div>
                                   </div>
                                 ))
                               ) : (
-                                <div className="text-muted-foreground text-xs sm:text-sm py-2">
-                                  Sin citas
+                                <div className="text-muted-foreground text-sm py-3 italic">
+                                  Sin citas programadas
                                 </div>
                               )}
                             </div>
@@ -545,7 +631,7 @@ useEffect(() => {
                   </CardContent>
                 </Card>
               ) : (
-                // Vista de lista - Optimizada para móvil
+                // Vista de lista - MEJORADA
                 <Card>
                   <CardHeader className="pb-3">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -572,7 +658,7 @@ useEffect(() => {
                               <div className="flex items-start justify-between gap-3">
                                 <div className="flex items-start space-x-3 flex-1 min-w-0">
                                   <div className="text-center flex-shrink-0">
-                                    <p className="font-medium text-sm sm:text-base">
+                                    <p className="font-bold text-base sm:text-lg text-primary">
                                       {formatTime(appointment.startTime)}
                                     </p>
                                     <p className="text-xs text-muted-foreground">
@@ -580,50 +666,102 @@ useEffect(() => {
                                     </p>
                                   </div>
                                   <div className="flex-1 min-w-0">
-                                    <p className="font-medium text-sm sm:text-base mb-1 truncate">
-                                      {appointment.clientName}
-                                    </p>
-                                    <p className="text-xs sm:text-sm text-muted-foreground mb-1 truncate">
-                                      {appointment.treatment?.name || 'Tratamiento eliminado'}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground truncate">
-                                      con {appointment.professional?.name || 'Profesional eliminado'}
-                                    </p>
-                                    {appointment.price && (
-                                      <Badge variant="secondary" className="text-xs mt-2">
-                                        ${appointment.price.toLocaleString()}
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <p className="font-semibold text-sm sm:text-base truncate">
+                                        {appointment.clientName}
+                                      </p>
+                                      {getStatusBadge(appointment.status)}
+                                    </div>
+                                    
+                                    {/* PROFESIONAL MÁS DESTACADO */}
+                                    <div className="flex items-center space-x-1 mb-1">
+                                      <User className="h-5 w-5 text-blue-600" />
+                                      <p className="font-bold text-base text-blue-700 truncate">
+                                        {appointment.professional?.name || 'Profesional eliminado'}
+                                      </p>
+                                    </div>
+                                    
+                                    {/* Tratamientos */}
+                                    <div className="flex items-center space-x-1 mb-1">
+                                      <Briefcase className="h-4 w-4 text-muted-foreground" />
+                                      {appointment.treatmentsList && appointment.treatmentsList.length > 0 ? (
+                                        <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                                          {appointment.treatmentsList.map(t => t.name).join(', ')}
+                                        </p>
+                                      ) : (
+                                        <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                                          {appointment.treatment?.name || 'Tratamiento eliminado'}
+                                        </p>
+                                      )}
+                                    </div>
+                                    
+                                    {(appointment.totalPrice || appointment.price) && (
+                                      <Badge variant="secondary" className="text-xs mt-1">
+                                        ${(appointment.totalPrice || appointment.price).toLocaleString()}
                                       </Badge>
                                     )}
                                   </div>
                                 </div>
-                                <div className="flex space-x-1 flex-shrink-0">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => router.push(`/admin/appointments/${appointment.id}`)}
-                                    className="px-2 sm:px-3"
-                                    title="Ver detalles"
-                                  >
-                                    <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => router.push(`/admin/appointments/editar/${appointment.id}`)}
-                                    className="px-2 sm:px-3"
-                                    title="Editar cita"
-                                  >
-                                    <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleDeleteAppointment(appointment.id)}
-                                    className="text-destructive hover:text-destructive px-2 sm:px-3"
-                                    title="Eliminar cita"
-                                  >
-                                    <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                                  </Button>
+                                
+                                <div className="flex flex-col space-y-1 flex-shrink-0">
+                                  {/* Cambio de estado */}
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="outline" size="sm" className="px-2 sm:px-3">
+                                        <Check className="h-3 w-3 sm:h-4 sm:w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem 
+                                        onClick={() => handleChangeStatus(appointment.id, 'Programado', appointment.clientName)}
+                                        disabled={appointment.status === 'Programado'}
+                                      >
+                                        Programado
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem 
+                                        onClick={() => handleChangeStatus(appointment.id, 'Completado', appointment.clientName)}
+                                        disabled={appointment.status === 'Completado'}
+                                      >
+                                        Completado
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem 
+                                        onClick={() => handleChangeStatus(appointment.id, 'Anulado', appointment.clientName)}
+                                        disabled={appointment.status === 'Anulado'}
+                                      >
+                                        Anulado
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                  
+                                  <div className="flex space-x-1">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => router.push(`/admin/appointments/${appointment.id}`)}
+                                      className="px-2 sm:px-3"
+                                      title="Ver detalles"
+                                    >
+                                      <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => router.push(`/admin/appointments/editar/${appointment.id}`)}
+                                      className="px-2 sm:px-3"
+                                      title="Editar cita"
+                                    >
+                                      <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleDeleteAppointment(appointment.id)}
+                                      className="text-destructive hover:text-destructive px-2 sm:px-3"
+                                      title="Eliminar cita"
+                                    >
+                                      <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                                    </Button>
+                                  </div>
                                 </div>
                               </div>
                             </div>

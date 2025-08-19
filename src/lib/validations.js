@@ -123,8 +123,13 @@ export const appointmentSchema = z.object({
   clientName: z.string()
     .min(1, 'Nombre del cliente requerido'),
   
-  treatmentId: z.string()
-    .min(1, 'Tratamiento requerido'),
+  // Soporte para múltiples tratamientos
+  treatments: z.array(z.object({
+    id: z.string().min(1, 'ID del tratamiento requerido'),
+    name: z.string().min(1, 'Nombre del tratamiento requerido'),
+    duration: z.number().min(1, 'Duración requerida'),
+    price: z.number().min(0, 'El precio debe ser mayor o igual a 0')
+  })).min(1, 'Debe seleccionar al menos un tratamiento'),
   
   professionalId: z.string()
     .min(1, 'Profesional requerido'),
@@ -151,9 +156,15 @@ export const appointmentSchema = z.object({
     .min(1, 'Duración requerida')
     .max(480, 'Duración máxima 8 horas'),
   
-  price: z.number()
-    .min(0, 'El precio debe ser mayor o igual a 0')
-    .optional()
+  totalPrice: z.number()
+    .min(0, 'El precio total debe ser mayor o igual a 0'),
+  
+  status: z.enum(['Programado', 'Completado', 'Anulado'])
+    .default('Programado'),
+  
+  // Campos para compatibilidad con formato legacy
+  treatmentId: z.string().optional(),
+  price: z.number().optional()
 }).refine(
   (data) => {
     // Validar que la hora de fin sea después de la hora de inicio
@@ -168,6 +179,26 @@ export const appointmentSchema = z.object({
   {
     message: 'La hora de fin debe ser posterior a la hora de inicio',
     path: ['endTime']
+  }
+).refine(
+  (data) => {
+    // Validar que la duración total coincida con la suma de tratamientos
+    const totalDuration = data.treatments.reduce((sum, treatment) => sum + treatment.duration, 0)
+    return data.duration === totalDuration
+  },
+  {
+    message: 'La duración total debe coincidir con la suma de los tratamientos',
+    path: ['duration']
+  }
+).refine(
+  (data) => {
+    // Validar que el precio total coincida con la suma de tratamientos
+    const totalPrice = data.treatments.reduce((sum, treatment) => sum + treatment.price, 0)
+    return data.totalPrice === totalPrice
+  },
+  {
+    message: 'El precio total debe coincidir con la suma de los tratamientos',
+    path: ['totalPrice']
   }
 )
 

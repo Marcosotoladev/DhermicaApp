@@ -505,9 +505,6 @@ export const clientService = {
   },
 
 
-  // AÑADE ESTE MÉTODO AL clientService en firebase-services.js
-// Agregar después del método search() existente:
-
 /**
  * Obtener todos los clientes con caché
  */
@@ -897,6 +894,154 @@ async getById(id, useCache = true) {
       optimizationUtils.invalidateCache(['appointments:'])
     } catch (error) {
       console.error('Error deleting appointment:', error)
+      throw error
+    }
+  },
+
+
+  /**
+   * Crear cita con soporte para múltiples tratamientos
+   */
+  async create(data) {
+    try {
+      // Calcular duración total si hay múltiples tratamientos
+      const totalDuration = data.treatments 
+        ? data.treatments.reduce((sum, treatment) => sum + treatment.duration, 0)
+        : data.duration
+
+      // Calcular precio total si hay múltiples tratamientos
+      const totalPrice = data.treatments
+        ? data.treatments.reduce((sum, treatment) => sum + (treatment.price || 0), 0)
+        : (data.totalPrice || data.price || 0)
+
+      // Validar conflictos antes de crear
+      const validation = await this.validateAppointmentTime(
+        data.professionalId,
+        data.date,
+        data.startTime,
+        totalDuration
+      )
+
+      if (!validation.isValid) {
+        throw new Error('Conflicto de horario detectado')
+      }
+
+      // Preparar datos para guardar
+      const appointmentData = {
+        ...data,
+        duration: totalDuration,
+        totalPrice: totalPrice,
+        status: data.status || 'Programado',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      }
+
+      // Mantener compatibilidad con formato legacy
+      if (data.treatments && data.treatments.length > 0) {
+        appointmentData.treatmentId = data.treatments[0].id // Primer tratamiento para compatibilidad
+        appointmentData.price = totalPrice
+      }
+
+      const docRef = await addDoc(collection(db, 'appointments'), appointmentData)
+      
+      // Invalidar caché relacionado
+      const dateStr = data.date.toISOString().split('T')[0]
+      optimizationUtils.invalidateCache([
+        `appointments:date:${dateStr}`,
+        `appointments:professional:${data.professionalId}`
+      ])
+      
+      return docRef.id
+    } catch (error) {
+      console.error('Error creating appointment:', error)
+      throw error
+    }
+  },
+
+  /**
+   * Actualizar cita con soporte para múltiples tratamientos
+   */
+  async update(id, data) {
+    try {
+      // Calcular duración total si se actualizan tratamientos
+      if (data.treatments) {
+        data.duration = data.treatments.reduce((sum, treatment) => sum + treatment.duration, 0)
+        data.totalPrice = data.treatments.reduce((sum, treatment) => sum + (treatment.price || 0), 0)
+        
+        // Mantener compatibilidad legacy
+        data.treatmentId = data.treatments[0]?.id
+        data.price = data.totalPrice
+      }
+
+      // Si se cambia fecha/hora/duración, validar conflictos
+      if (data.date || data.startTime || data.duration || data.treatments) {
+        // Obtener datos actuales de la cita para validación
+        const currentAppointment = await this.getById(id)
+        
+        const validation = await this.validateAppointmentTime(
+          data.professionalId || currentAppointment.professionalId,
+          data.date || currentAppointment.date,
+          data.startTime || currentAppointment.startTime,
+          data.duration || currentAppointment.duration,
+          id
+        )
+
+        if (!validation.isValid) {
+          throw new Error('Conflicto de horario detectado')
+        }
+      }
+
+      const docRef = doc(db, 'appointments', id)
+      await updateDoc(docRef, {
+        ...data,
+        updatedAt: serverTimestamp()
+      })
+      
+      // Invalidar caché relacionado
+      if (data.date) {
+        const dateStr = data.date.toISOString().split('T')[0]
+        optimizationUtils.invalidateCache([
+          `appointments:date:${dateStr}`,
+          `appointments:professional:`
+        ])
+      } else {
+        optimizationUtils.invalidateCache(['appointments:'])
+      }
+    } catch (error) {
+      console.error('Error updating appointment:', error)
+      throw error
+    }
+  },
+
+  /**
+   * Validar conflictos de horario con duración dinámica
+   */
+  async validateAppointmentTime(professionalId, date, startTime, duration, excludeId = null) {
+    try {
+      // Usar servicio optimizado para obtener citas
+      const appointments = await this.getByProfessionalAndDate(professionalId, date)
+      
+      const newStartMinutes = timeToMinutes(startTime)
+      const newEndMinutes = newStartMinutes + duration
+      
+      const conflicts = appointments
+        .filter(apt => apt.id !== excludeId)
+        .filter(apt => {
+          const existingStart = timeToMinutes(apt.startTime)
+          // Usar duración de múltiples tratamientos si existe
+          const existingDuration = apt.duration || 60
+          const existingEnd = existingStart + existingDuration
+          
+          // Verificar solapamiento
+          return !(newEndMinutes <= existingStart || newStartMinutes >= existingEnd)
+        })
+      
+      return {
+        isValid: conflicts.length === 0,
+        conflicts
+      }
+    } catch (error) {
+      console.error('Error validating appointment time:', error)
       throw error
     }
   }

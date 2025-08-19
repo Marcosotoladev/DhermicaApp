@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Check, Clock, User, Briefcase, AlertTriangle } from 'lucide-react'
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Check, Clock, User, Briefcase, AlertTriangle, Plus, X, DollarSign } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../ui/form'
@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import { Badge } from '../ui/badge'
 import { Input } from '../ui/input'
 import { Alert, AlertDescription } from '../ui/alert'
+import { Separator } from '../ui/separator'
 import { ClientSearch } from './ClientSearch'
 import { TimeSlotPicker } from './TimeSlotPicker'
 import { appointmentService, professionalService, treatmentService } from '../../lib/firebase-services'
@@ -53,23 +54,22 @@ const appointmentSchema = z.object({
   professionalId: z.string().min(1, 'Selecciona un profesional'),
   date: z.date({ required_error: 'Selecciona una fecha' }),
   clientId: z.string().min(1, 'Selecciona un cliente'),
-  treatmentId: z.string().min(1, 'Selecciona un tratamiento'),
   startTime: z.string().min(1, 'Selecciona una hora'),
-  price: z.number().optional()
+  status: z.enum(['Programado', 'Completado', 'Anulado']).default('Programado')
 })
 
 const STEPS = [
   'select_professional',
   'select_date', 
   'search_client',
-  'select_treatment',
+  'select_treatments',
   'select_time',
   'confirm'
 ]
 
 /**
  * Formulario principal para crear/editar citas
- * Wizard multi-paso con validaciones en tiempo real
+ * Wizard multi-paso con soporte para múltiples tratamientos
  */
 export function AppointmentForm({ 
   onSuccess, 
@@ -82,7 +82,7 @@ export function AppointmentForm({
   const [professionals, setProfessionals] = useState([])
   const [treatments, setTreatments] = useState([])
   const [selectedClient, setSelectedClient] = useState(null)
-  const [selectedTreatment, setSelectedTreatment] = useState(null)
+  const [selectedTreatments, setSelectedTreatments] = useState([]) // Array de tratamientos
   const [loading, setLoading] = useState(false)
   const [medicalWarnings, setMedicalWarnings] = useState([])
 
@@ -91,10 +91,9 @@ export function AppointmentForm({
     defaultValues: {
       professionalId: initialData?.professionalId || '',
       clientId: initialData?.clientId || '',
-      treatmentId: initialData?.treatmentId || '',
       date: initialData?.date?.toDate?.() || initialData?.date || new Date(),
       startTime: initialData?.startTime || '',
-      price: initialData?.price || undefined
+      status: initialData?.status || 'Programado'
     }
   })
 
@@ -110,7 +109,7 @@ export function AppointmentForm({
 
   useEffect(() => {
     validateMedicalCompatibility()
-  }, [selectedClient, selectedTreatment])
+  }, [selectedClient, selectedTreatments])
 
   const loadInitialData = async () => {
     setLoading(true)
@@ -137,16 +136,25 @@ export function AppointmentForm({
         const client = { 
           id: initialData.clientId, 
           name: initialData.clientName,
-          // Agregar otros campos si están disponibles
         }
         setSelectedClient(client)
       }
 
-      // Cargar tratamiento si existe
-      if (initialData.treatmentId) {
+      // Cargar tratamientos (convertir de formato legacy si es necesario)
+      if (initialData.treatments && Array.isArray(initialData.treatments)) {
+        // Nuevo formato con múltiples tratamientos
+        setSelectedTreatments(initialData.treatments)
+      } else if (initialData.treatmentId) {
+        // Formato legacy con un solo tratamiento
         const treatment = treatments.find(t => t.id === initialData.treatmentId)
         if (treatment) {
-          setSelectedTreatment(treatment)
+          setSelectedTreatments([{
+            id: treatment.id,
+            name: treatment.name,
+            duration: treatment.duration,
+            basePrice: treatment.basePrice,
+            price: initialData.price || treatment.basePrice || 0
+          }])
         }
       }
 
@@ -159,50 +167,91 @@ export function AppointmentForm({
   }
 
   const validateMedicalCompatibility = () => {
-    if (!selectedClient || !selectedTreatment) {
+    if (!selectedClient || selectedTreatments.length === 0) {
       setMedicalWarnings([])
       return
     }
 
-    // Solo validar si tenemos información médica del cliente
-    if (selectedClient.medicalInfo) {
-      const validation = validateMedicalRestrictions(
-        selectedClient.medicalInfo, 
-        selectedTreatment.medicalRestrictions || []
-      )
-      setMedicalWarnings(validation.warnings || [])
+    const allWarnings = []
+    selectedTreatments.forEach(selectedTreatment => {
+      const treatment = treatments.find(t => t.id === selectedTreatment.id)
+      if (treatment && selectedClient.medicalInfo) {
+        const validation = validateMedicalRestrictions(
+          selectedClient.medicalInfo, 
+          treatment.medicalRestrictions || []
+        )
+        allWarnings.push(...validation.warnings)
+      }
+    })
+    
+    setMedicalWarnings([...new Set(allWarnings)]) // Eliminar duplicados
+  }
+
+  const addTreatment = (treatmentId) => {
+    const treatment = treatments.find(t => t.id === treatmentId)
+    if (treatment && !selectedTreatments.find(st => st.id === treatmentId)) {
+      const newTreatment = {
+        id: treatment.id,
+        name: treatment.name,
+        duration: treatment.duration,
+        basePrice: treatment.basePrice || 0,
+        price: treatment.basePrice || 0
+      }
+      setSelectedTreatments([...selectedTreatments, newTreatment])
     }
   }
 
+  const removeTreatment = (treatmentId) => {
+    setSelectedTreatments(selectedTreatments.filter(t => t.id !== treatmentId))
+  }
+
+  const updateTreatmentPrice = (treatmentId, newPrice) => {
+    setSelectedTreatments(selectedTreatments.map(t => 
+      t.id === treatmentId ? { ...t, price: newPrice } : t
+    ))
+  }
+
+  const getTotalDuration = () => {
+    return selectedTreatments.reduce((total, treatment) => total + treatment.duration, 0)
+  }
+
+  const getTotalPrice = () => {
+    return selectedTreatments.reduce((total, treatment) => total + (treatment.price || 0), 0)
+  }
+
   const onSubmit = async (data) => {
-    if (!selectedClient || !selectedTreatment) {
-      console.error('Missing client or treatment data')
+    if (!selectedClient || selectedTreatments.length === 0) {
+      console.error('Missing client or treatments data')
       return
     }
 
     try {
-      const endTime = addMinutesToTime(data.startTime, selectedTreatment.duration)
+      const totalDuration = getTotalDuration()
+      const endTime = addMinutesToTime(data.startTime, totalDuration)
 
       const appointmentData = {
         clientId: data.clientId,
         clientName: selectedClient.name,
-        treatmentId: data.treatmentId,
+        treatments: selectedTreatments, // Array de tratamientos
         professionalId: data.professionalId,
         date: data.date,
         startTime: data.startTime,
         endTime,
-        duration: selectedTreatment.duration,
-        price: data.price || selectedTreatment.basePrice
+        duration: totalDuration,
+        totalPrice: getTotalPrice(),
+        status: data.status,
+        // Mantener compatibilidad con formato legacy
+        treatmentId: selectedTreatments[0]?.id, 
+        price: getTotalPrice()
       }
 
-      // Llamar al callback de éxito con los datos
       if (onSuccess) {
         await onSuccess(appointmentData)
       }
 
     } catch (error) {
       console.error('Error in form submission:', error)
-      throw error // Re-throw para que lo maneje el componente padre
+      throw error
     }
   }
 
@@ -226,8 +275,8 @@ export function AppointmentForm({
         return form.watch('date')
       case 'search_client':
         return selectedClient
-      case 'select_treatment':
-        return selectedTreatment
+      case 'select_treatments':
+        return selectedTreatments.length > 0
       case 'select_time':
         return form.watch('startTime')
       default:
@@ -240,7 +289,7 @@ export function AppointmentForm({
       select_professional: 'Seleccionar Profesional',
       select_date: 'Seleccionar Fecha',
       search_client: 'Buscar Cliente',
-      select_treatment: 'Seleccionar Tratamiento', 
+      select_treatments: 'Seleccionar Tratamientos', 
       select_time: 'Seleccionar Horario',
       confirm: 'Confirmar Cita'
     }
@@ -317,7 +366,7 @@ export function AppointmentForm({
                           {professionals.map((professional) => (
                             <SelectItem key={professional.id} value={professional.id}>
                               <div className="flex items-center justify-between w-full">
-                                <span>{professional.name}</span>
+                                <span className="font-medium">{professional.name}</span>
                                 {professional.specialties && (
                                   <Badge variant="outline" className="ml-2 text-xs">
                                     {professional.specialties.length} especialidades
@@ -373,7 +422,7 @@ export function AppointmentForm({
                       <FormMessage />
                       {selectedProfessional && (
                         <p className="text-xs text-muted-foreground">
-                          Profesional seleccionado: {selectedProfessional.name}
+                          Profesional seleccionado: <span className="font-medium">{selectedProfessional.name}</span>
                         </p>
                       )}
                     </FormItem>
@@ -398,55 +447,123 @@ export function AppointmentForm({
                 </div>
               )}
 
-              {/* Paso 4: Seleccionar Tratamiento */}
-              {STEPS[currentStep] === 'select_treatment' && (
+              {/* Paso 4: Seleccionar Tratamientos */}
+              {STEPS[currentStep] === 'select_treatments' && (
                 <div className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="treatmentId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tratamiento</FormLabel>
-                        <Select
-                          onValueChange={(value) => {
-                            field.onChange(value)
-                            const treatment = treatments.find(t => t.id === value)
-                            setSelectedTreatment(treatment || null)
-                          }}
-                          defaultValue={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecciona un tratamiento" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {treatments.map((treatment) => (
-                              <SelectItem key={treatment.id} value={treatment.id}>
-                                <div className="flex items-center justify-between w-full">
-                                  <div>
-                                    <p className="font-medium">{treatment.name}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {treatment.category}
-                                    </p>
-                                  </div>
-                                  <div className="flex space-x-2 ml-4">
-                                    <Badge variant="outline" className="text-xs">
-                                      {treatment.duration} min
-                                    </Badge>
-                                    <Badge variant="secondary" className="text-xs">
-                                      ${treatment.basePrice}
-                                    </Badge>
-                                  </div>
+                  <div>
+                    <FormLabel>Agregar Tratamiento</FormLabel>
+                    <Select onValueChange={addTreatment}>
+                      <SelectTrigger className="mt-2">
+                        <SelectValue placeholder="Selecciona un tratamiento para agregar" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {treatments
+                          .filter(treatment => !selectedTreatments.find(st => st.id === treatment.id))
+                          .map((treatment) => (
+                            <SelectItem key={treatment.id} value={treatment.id}>
+                              <div className="flex items-center justify-between w-full">
+                                <div>
+                                  <p className="font-medium">{treatment.name}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {treatment.category}
+                                  </p>
                                 </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                                <div className="flex space-x-2 ml-4">
+                                  <Badge variant="outline" className="text-xs">
+                                    {treatment.duration} min
+                                  </Badge>
+                                  <Badge variant="secondary" className="text-xs">
+                                    ${treatment.basePrice || 0}
+                                  </Badge>
+                                </div>
+                              </div>
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Lista de tratamientos seleccionados */}
+                  {selectedTreatments.length > 0 && (
+                    <div className="space-y-3">
+                      <Separator />
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium">Tratamientos Seleccionados</h4>
+                        <Badge variant="outline">
+                          {selectedTreatments.length} tratamiento{selectedTreatments.length !== 1 ? 's' : ''}
+                        </Badge>
+                      </div>
+                      
+                      {selectedTreatments.map((treatment, index) => (
+                        <Card key={treatment.id} className="border-l-4 border-l-primary">
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center space-x-2 mb-2">
+                                  <h5 className="font-medium">{treatment.name}</h5>
+                                  <Badge variant="outline" className="text-xs">
+                                    {treatment.duration} min
+                                  </Badge>
+                                </div>
+                                
+                                <div className="flex items-center space-x-4">
+                                  <div className="flex items-center space-x-2">
+                                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                                    <span className="text-sm text-muted-foreground">Precio:</span>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="100"
+                                      value={treatment.price || 0}
+                                      onChange={(e) => updateTreatmentPrice(treatment.id, Number(e.target.value) || 0)}
+                                      className="w-24 h-8 text-sm"
+                                    />
+                                  </div>
+                                  {treatment.basePrice && treatment.price !== treatment.basePrice && (
+                                    <span className="text-xs text-muted-foreground">
+                                      (Base: ${treatment.basePrice})
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => removeTreatment(treatment.id)}
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+
+                      {/* Resumen totales */}
+                      <Card className="bg-muted/50">
+                        <CardContent className="p-4">
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground">Duración total:</span>
+                              <div className="flex items-center space-x-1">
+                                <Clock className="h-4 w-4 text-muted-foreground" />
+                                <span className="font-medium">{getTotalDuration()} min</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground">Precio total:</span>
+                              <div className="flex items-center space-x-1">
+                                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                                <span className="font-medium">${getTotalPrice()}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
                   
                   {/* Alertas médicas */}
                   {medicalWarnings.length > 0 && (
@@ -468,15 +585,21 @@ export function AppointmentForm({
               )}
 
               {/* Paso 5: Seleccionar Hora */}
-              {STEPS[currentStep] === 'select_time' && selectedTreatment && (
-                <TimeSlotPicker
-                  professionalId={form.watch('professionalId')}
-                  date={form.watch('date')}
-                  duration={selectedTreatment.duration}
-                  onSelectTime={(time) => form.setValue('startTime', time)}
-                  selectedTime={form.watch('startTime')}
-                  excludeAppointmentId={initialData?.id}
-                />
+              {STEPS[currentStep] === 'select_time' && selectedTreatments.length > 0 && (
+                <div>
+                  <div className="mb-4 p-3 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground mb-1">Duración total de la cita:</p>
+                    <p className="font-medium">{getTotalDuration()} minutos</p>
+                  </div>
+                  <TimeSlotPicker
+                    professionalId={form.watch('professionalId')}
+                    date={form.watch('date')}
+                    duration={getTotalDuration()}
+                    onSelectTime={(time) => form.setValue('startTime', time)}
+                    selectedTime={form.watch('startTime')}
+                    excludeAppointmentId={initialData?.id}
+                  />
+                </div>
               )}
 
               {/* Paso 6: Confirmar */}
@@ -491,15 +614,15 @@ export function AppointmentForm({
                   </div>
                   
                   <Card className="bg-muted/50">
-                    <CardContent className="p-4 space-y-3">
+                    <CardContent className="p-4 space-y-4">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                         <div>
                           <p className="text-muted-foreground">Cliente</p>
                           <p className="font-medium">{selectedClient?.name}</p>
                         </div>
                         <div>
-                          <p className="text-muted-foreground">Tratamiento</p>
-                          <p className="font-medium">{selectedTreatment?.name}</p>
+                          <p className="text-muted-foreground">Profesional</p>
+                          <p className="font-medium">{selectedProfessional?.name}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground">Fecha</p>
@@ -510,44 +633,72 @@ export function AppointmentForm({
                         <div>
                           <p className="text-muted-foreground">Horario</p>
                           <p className="font-medium">
-                            {form.watch('startTime')} - {form.watch('startTime') && selectedTreatment && 
-                              addMinutesToTime(form.watch('startTime'), selectedTreatment.duration)}
+                            {form.watch('startTime')} - {form.watch('startTime') && 
+                              addMinutesToTime(form.watch('startTime'), getTotalDuration())}
                           </p>
                         </div>
-                        <div>
-                          <p className="text-muted-foreground">Duración</p>
-                          <p className="font-medium">{selectedTreatment?.duration} minutos</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Profesional</p>
-                          <p className="font-medium">{selectedProfessional?.name}</p>
+                      </div>
+
+                      <Separator />
+
+                      {/* Tratamientos */}
+                      <div>
+                        <p className="text-muted-foreground mb-2">Tratamientos</p>
+                        <div className="space-y-2">
+                          {selectedTreatments.map((treatment, index) => (
+                            <div key={treatment.id} className="flex items-center justify-between text-sm">
+                              <span>{treatment.name}</span>
+                              <div className="flex items-center space-x-2">
+                                <Badge variant="outline" className="text-xs">
+                                  {treatment.duration} min
+                                </Badge>
+                                <span className="font-medium">${treatment.price}</span>
+                              </div>
+                            </div>
+                          ))}
+                          <Separator />
+                          <div className="flex items-center justify-between font-medium">
+                            <span>Total ({getTotalDuration()} min)</span>
+                            <span>${getTotalPrice()}</span>
+                          </div>
                         </div>
                       </div>
+
+                      {/* Estado de la cita */}
+                      {mode === 'edit' && (
+                        <div>
+                          <FormField
+                            control={form.control}
+                            name="status"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Estado de la Cita</FormLabel>
+                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="Programado">
+                                      <Badge variant="default">Programado</Badge>
+                                    </SelectItem>
+                                    <SelectItem value="Completado">
+                                      <Badge variant="secondary" className="bg-green-100 text-green-800">Completado</Badge>
+                                    </SelectItem>
+                                    <SelectItem value="Anulado">
+                                      <Badge variant="destructive">Anulado</Badge>
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
-
-                  {/* Precio final */}
-                  <FormField
-                    control={form.control}
-                    name="price"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Precio Final (opcional)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            placeholder={`${selectedTreatment?.basePrice || 0}`}
-                            {...field}
-                            onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
-                          />
-                        </FormControl>
-                        <p className="text-xs text-muted-foreground">
-                          Deja vacío para usar el precio base (${selectedTreatment?.basePrice})
-                        </p>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
                   
                   {medicalWarnings.length > 0 && (
                     <Alert className="border-yellow-200 bg-yellow-50">
