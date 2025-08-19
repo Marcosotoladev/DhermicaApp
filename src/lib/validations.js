@@ -313,15 +313,16 @@ export const TREATMENT_CATEGORIES = [
 ]
 
 export const PROFESSIONAL_SPECIALTIES = [
-  'Tratamientos Faciales',
-  'Tratamientos Corporales', 
-  'Depilación Láser',
-  'Microdermoabrasión',
-  'Radiofrecuencia',
-  'Mesoterapia',
-  'Masajes Terapéuticos',
-  'Aparatología',
-  'Cejas y Pestañas',
+  'Aparatologia',
+  'Cejas',
+  'Corporales',
+  'Depilacion',
+  'Faciales',
+  'Manos',
+  'Pestañas',
+  'Pies',
   'HiFu',
-  'Liposonix'
+  'Liposonix',
+  'Definitiva',
+  'Otro'
 ]

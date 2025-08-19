@@ -85,6 +85,7 @@ export function AppointmentForm({
   const [selectedTreatments, setSelectedTreatments] = useState([]) // Array de tratamientos
   const [loading, setLoading] = useState(false)
   const [medicalWarnings, setMedicalWarnings] = useState([])
+  const [professionalErrors, setProfessionalErrors] = useState([])
 
   const form = useForm({
     resolver: zodResolver(appointmentSchema),
@@ -109,7 +110,42 @@ export function AppointmentForm({
 
   useEffect(() => {
     validateMedicalCompatibility()
-  }, [selectedClient, selectedTreatments])
+    validateProfessionalCompatibility()
+  }, [selectedClient, selectedTreatments, form.watch('professionalId'), professionals, treatments])
+
+  const validateProfessionalCompatibility = () => {
+    const professionalId = form.watch('professionalId')
+    const professional = professionals.find(p => p.id === professionalId)
+    
+    if (!professional || selectedTreatments.length === 0) {
+      setProfessionalErrors([])
+      return
+    }
+
+    const incompatibleTreatments = []
+    
+    selectedTreatments.forEach(selectedTreatment => {
+      const treatment = treatments.find(t => t.id === selectedTreatment.id)
+      if (treatment && treatment.category) {
+        // Verificar si el profesional tiene la especialidad para este tratamiento
+        if (!professional.specialties?.includes(treatment.category)) {
+          incompatibleTreatments.push({
+            name: treatment.name,
+            category: treatment.category
+          })
+        }
+      }
+    })
+
+    if (incompatibleTreatments.length > 0) {
+      const errors = incompatibleTreatments.map(t => 
+        `${professional.name} no puede realizar "${t.name}" (requiere especialidad: ${t.category})`
+      )
+      setProfessionalErrors(errors)
+    } else {
+      setProfessionalErrors([])
+    }
+  }
 
   const loadInitialData = async () => {
     setLoading(true)
@@ -176,6 +212,8 @@ export function AppointmentForm({
     }
 
     const allWarnings = []
+    
+    // Validaciones médicas
     selectedTreatments.forEach(selectedTreatment => {
       const treatment = treatments.find(t => t.id === selectedTreatment.id)
       if (treatment && selectedClient.medicalInfo) {
@@ -279,6 +317,8 @@ export function AppointmentForm({
       case 'search_client':
         return selectedClient
       case 'select_treatments':
+        // No puede continuar si hay errores de compatibilidad
+        if (professionalErrors.length > 0) return false
         return selectedTreatments.length > 0
       case 'select_time':
         return form.watch('startTime')
@@ -587,6 +627,54 @@ export function AppointmentForm({
                     </div>
                   )}
                   
+                  {/* Errores de compatibilidad de profesional */}
+                  {professionalErrors.length > 0 && (
+                    <Alert className="border-red-200 bg-red-50">
+                      <AlertTriangle className="h-4 w-4 text-red-600" />
+                      <AlertDescription>
+                        <h4 className="font-medium text-red-800 mb-2">❌ Profesional Incompatible</h4>
+                        <ul className="space-y-1 mb-3">
+                          {professionalErrors.map((error, index) => (
+                            <li key={index} className="text-sm text-red-700">
+                              • {error}
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCurrentStep(0)} // Volver a selección de profesional
+                            className="border-red-300 text-red-700 hover:bg-red-100"
+                          >
+                            Cambiar Profesional
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              // Quitar tratamientos incompatibles
+                              const professionalId = form.watch('professionalId')
+                              const professional = professionals.find(p => p.id === professionalId)
+                              if (professional) {
+                                const compatibleTreatments = selectedTreatments.filter(selectedTreatment => {
+                                  const treatment = treatments.find(t => t.id === selectedTreatment.id)
+                                  return treatment && treatment.category && professional.specialties?.includes(treatment.category)
+                                })
+                                setSelectedTreatments(compatibleTreatments)
+                              }
+                            }}
+                            className="border-red-300 text-red-700 hover:bg-red-100"
+                          >
+                            Quitar Tratamientos Incompatibles
+                          </Button>
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
                   {/* Alertas médicas */}
                   {medicalWarnings.length > 0 && (
                     <Alert className="border-yellow-200 bg-yellow-50">
@@ -734,6 +822,9 @@ export function AppointmentForm({
                             </li>
                           ))}
                         </ul>
+                        <p className="text-xs text-yellow-600 mt-2">
+                          Verifica estas advertencias antes de confirmar la cita.
+                        </p>
                       </AlertDescription>
                     </Alert>
                   )}
@@ -782,6 +873,7 @@ export function AppointmentForm({
                     type="button"
                     onClick={nextStep}
                     disabled={!canProceed() || isSubmitting}
+                    className={professionalErrors.length > 0 ? "opacity-50 cursor-not-allowed" : ""}
                   >
                     Siguiente
                     <ChevronRight className="h-4 w-4 ml-2" />
