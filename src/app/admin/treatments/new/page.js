@@ -197,8 +197,17 @@ export default function NewTreatmentPage() {
                             min="15"
                             max="480"
                             step="15"
-                            {...field}
-                            onChange={(e) => field.onChange(Number(e.target.value))}
+                            placeholder="60"
+                            value={field.value === 0 ? '' : field.value || ''}
+                            onChange={(e) => {
+                              const value = e.target.value
+                              if (value === '') {
+                                field.onChange('')
+                              } else {
+                                const numValue = parseInt(value) || 0
+                                field.onChange(numValue)
+                              }
+                            }}
                           />
                         </FormControl>
                         <FormMessage />
@@ -215,13 +224,30 @@ export default function NewTreatmentPage() {
                         <FormLabel>Precio ($) - Opcional</FormLabel>
                         <FormControl>
                           <Input 
-                            type="number"
-                            min="0"
-                            step="100"
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
                             placeholder="Dejar vacío si no aplica"
-                            {...field}
-                            value={field.value || ''}
-                            onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                            value={field.value === undefined || field.value === null ? '' : String(field.value)}
+                            onChange={(e) => {
+                              const value = e.target.value.replace(/[^0-9]/g, '') // Solo números
+                              if (value === '') {
+                                field.onChange(undefined)
+                              } else {
+                                const numValue = parseInt(value, 10)
+                                field.onChange(numValue)
+                              }
+                            }}
+                            onBlur={(e) => {
+                              // Forzar actualización al perder foco
+                              const value = e.target.value.replace(/[^0-9]/g, '')
+                              if (value === '') {
+                                field.onChange(undefined)
+                              } else {
+                                const numValue = parseInt(value, 10)
+                                field.onChange(numValue)
+                              }
+                            }}
                           />
                         </FormControl>
                         <FormMessage />

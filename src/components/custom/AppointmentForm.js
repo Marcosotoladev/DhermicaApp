@@ -143,7 +143,10 @@ export function AppointmentForm({
       // Cargar tratamientos (convertir de formato legacy si es necesario)
       if (initialData.treatments && Array.isArray(initialData.treatments)) {
         // Nuevo formato con múltiples tratamientos
-        setSelectedTreatments(initialData.treatments)
+        setSelectedTreatments(initialData.treatments.map(t => ({
+          ...t,
+          price: t.price || t.basePrice || 0
+        })))
       } else if (initialData.treatmentId) {
         // Formato legacy con un solo tratamiento
         const treatment = treatments.find(t => t.id === initialData.treatmentId)
@@ -152,8 +155,8 @@ export function AppointmentForm({
             id: treatment.id,
             name: treatment.name,
             duration: treatment.duration,
-            basePrice: treatment.basePrice,
-            price: initialData.price || treatment.basePrice || 0
+            basePrice: treatment.basePrice || 0,
+            price: initialData.price || initialData.totalPrice || treatment.basePrice || 0
           }])
         }
       }
@@ -195,7 +198,7 @@ export function AppointmentForm({
         name: treatment.name,
         duration: treatment.duration,
         basePrice: treatment.basePrice || 0,
-        price: treatment.basePrice || 0
+        price: treatment.basePrice || 0 // Usar basePrice o 0, no forzar 0
       }
       setSelectedTreatments([...selectedTreatments, newTreatment])
     }
@@ -511,15 +514,34 @@ export function AppointmentForm({
                                     <DollarSign className="h-4 w-4 text-muted-foreground" />
                                     <span className="text-sm text-muted-foreground">Precio:</span>
                                     <Input
-                                      type="number"
-                                      min="0"
-                                      step="100"
-                                      value={treatment.price || 0}
-                                      onChange={(e) => updateTreatmentPrice(treatment.id, Number(e.target.value) || 0)}
-                                      className="w-24 h-8 text-sm"
+                                      type="text"
+                                      inputMode="numeric"
+                                      pattern="[0-9]*"
+                                      placeholder="0"
+                                      value={treatment.price === undefined || treatment.price === null ? '' : String(treatment.price)}
+                                      onChange={(e) => {
+                                        const value = e.target.value.replace(/[^0-9]/g, '') // Solo números
+                                        if (value === '') {
+                                          updateTreatmentPrice(treatment.id, 0)
+                                        } else {
+                                          const numValue = parseInt(value, 10)
+                                          updateTreatmentPrice(treatment.id, numValue)
+                                        }
+                                      }}
+                                      onBlur={(e) => {
+                                        // Forzar actualización al perder foco
+                                        const value = e.target.value.replace(/[^0-9]/g, '')
+                                        if (value === '') {
+                                          updateTreatmentPrice(treatment.id, 0)
+                                        } else {
+                                          const numValue = parseInt(value, 10)
+                                          updateTreatmentPrice(treatment.id, numValue)
+                                        }
+                                      }}
+                                      className="w-28 h-8 text-sm"
                                     />
                                   </div>
-                                  {treatment.basePrice && treatment.price !== treatment.basePrice && (
+                                  {treatment.basePrice && treatment.basePrice !== treatment.price && (
                                     <span className="text-xs text-muted-foreground">
                                       (Base: ${treatment.basePrice})
                                     </span>
