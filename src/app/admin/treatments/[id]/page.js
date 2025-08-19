@@ -3,7 +3,7 @@
 
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Edit, Trash2, Clock, DollarSign, Tag, Image as ImageIcon, Calendar, AlertTriangle, Eye, CheckCircle, XCircle } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, Clock, DollarSign, Tag, Calendar, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
 import { Button } from '../../../../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../../components/ui/card'
 import { Badge } from '../../../../components/ui/badge'
@@ -16,7 +16,7 @@ import { toast } from 'sonner'
 
 /**
  * Página de detalle del tratamiento
- * Muestra toda la información y permite acciones de edición/eliminación
+ * Muestra información simplificada y permite acciones de edición/eliminación
  */
 export default function TreatmentDetailPage({ params }) {
   const router = useRouter()
@@ -109,7 +109,7 @@ export default function TreatmentDetailPage({ params }) {
             </div>
             
             {/* Content skeletons */}
-            {[...Array(3)].map((_, i) => (
+            {[...Array(2)].map((_, i) => (
               <Card key={i}>
                 <CardHeader>
                   <Skeleton className="h-6 w-32 mb-2" />
@@ -190,7 +190,7 @@ export default function TreatmentDetailPage({ params }) {
                 </Badge>
               </div>
               <p className="text-sm sm:text-base text-muted-foreground">
-                Detalles completos del tratamiento
+                Detalles del tratamiento
               </p>
             </div>
           </div>
@@ -249,39 +249,6 @@ export default function TreatmentDetailPage({ params }) {
           {/* Información principal */}
           <div className="lg:col-span-2 space-y-6">
             
-            {/* Descripción */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Descripción</CardTitle>
-                <CardDescription>
-                  Información detallada del tratamiento
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-foreground leading-relaxed">
-                  {treatment.description}
-                </p>
-              </CardContent>
-            </Card>
-
-            {/* Imagen */}
-            {treatment.imageUrl && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Imagen del Tratamiento</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="aspect-video bg-muted rounded-lg overflow-hidden">
-                    <img 
-                      src={treatment.imageUrl} 
-                      alt={treatment.name}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
             {/* Restricciones médicas */}
             {treatment.medicalRestrictions && treatment.medicalRestrictions.length > 0 && (
               <Card>
@@ -303,7 +270,7 @@ export default function TreatmentDetailPage({ params }) {
                           variant="outline" 
                           className="border-yellow-300 text-yellow-800 bg-yellow-50"
                         >
-                          {restriction.replace('_', ' ')}
+                          {restriction}
                         </Badge>
                       ))}
                     </div>
@@ -318,6 +285,19 @@ export default function TreatmentDetailPage({ params }) {
                 </CardContent>
               </Card>
             )}
+
+            {/* Mensaje cuando no hay restricciones */}
+            {(!treatment.medicalRestrictions || treatment.medicalRestrictions.length === 0) && (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">Sin Restricciones Médicas</h3>
+                  <p className="text-muted-foreground">
+                    Este tratamiento no tiene restricciones médicas especiales configuradas.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Panel lateral */}
@@ -326,7 +306,7 @@ export default function TreatmentDetailPage({ params }) {
             {/* Información rápida */}
             <Card>
               <CardHeader>
-                <CardTitle>Información Rápida</CardTitle>
+                <CardTitle>Información del Tratamiento</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 
@@ -358,10 +338,10 @@ export default function TreatmentDetailPage({ params }) {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Precio Base</span>
+                    <span className="text-sm text-muted-foreground">Precio</span>
                   </div>
                   <span className="font-medium text-lg">
-                    ${treatment.basePrice}
+                    {treatment.basePrice ? `$${treatment.basePrice}` : 'Sin precio definido'}
                   </span>
                 </div>
               </CardContent>

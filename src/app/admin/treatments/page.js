@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, ArrowLeft, Edit, Trash2, Search, Grid, List, Filter, Eye, Clock, DollarSign, Tag, Image as ImageIcon } from 'lucide-react'
+import { Plus, ArrowLeft, Edit, Trash2, Search, Grid, List, Clock, DollarSign, Tag, Eye } from 'lucide-react'
 import { Button } from '../../../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card'
 import { Badge } from '../../../components/ui/badge'
@@ -31,13 +31,18 @@ export default function TreatmentsPage() {
 
   // Categorías disponibles
   const categories = [
-    'Facial',
-    'Corporal',
-    'Depilación',
-    'Rejuvenecimiento',
-    'Limpieza',
-    'Hidratación',
-    'Masajes'
+    'Aparatologia',
+    'Cejas',
+    'Corporales',
+    'Depilacion',
+    'Faciales',
+    'Manos',
+    'Pestañas',
+    'Pies',
+    'HiFu',
+    'Liposonix',
+    'Definitiva',
+    'Otro'
   ]
 
   useEffect(() => {
@@ -75,7 +80,6 @@ export default function TreatmentsPage() {
       const search = searchTerm.toLowerCase()
       filtered = filtered.filter(treatment =>
         treatment.name.toLowerCase().includes(search) ||
-        treatment.description.toLowerCase().includes(search) ||
         treatment.category.toLowerCase().includes(search)
       )
     }
@@ -277,24 +281,6 @@ export default function TreatmentsPage() {
                   </CardHeader>
                   
                   <CardContent className="space-y-4">
-                    {/* Imagen */}
-                    <div className="aspect-video bg-muted rounded-lg flex items-center justify-center overflow-hidden">
-                      {treatment.imageUrl ? (
-                        <img 
-                          src={treatment.imageUrl} 
-                          alt={treatment.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <ImageIcon className="h-8 w-8 text-muted-foreground" />
-                      )}
-                    </div>
-                    
-                    {/* Descripción */}
-                    <p className="text-sm text-muted-foreground line-clamp-2">
-                      {treatment.description}
-                    </p>
-                    
                     {/* Detalles */}
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div className="flex items-center space-x-1">
@@ -303,7 +289,7 @@ export default function TreatmentsPage() {
                       </div>
                       <div className="flex items-center space-x-1">
                         <DollarSign className="h-4 w-4 text-muted-foreground" />
-                        <span>${treatment.basePrice}</span>
+                        <span>{treatment.basePrice ? `$${treatment.basePrice}` : 'Sin precio'}</span>
                       </div>
                     </div>
                     
@@ -338,10 +324,19 @@ export default function TreatmentsPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => router.push(`/admin/treatments/editar/${treatment.id}`)}
-                        className="flex-1"
+                        className="px-3"
+                        title="Editar tratamiento"
                       >
-                        <Edit className="h-4 w-4 mr-2" />
-                        Editar
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDelete(treatment.id, treatment.name)}
+                        className="text-destructive hover:text-destructive px-3"
+                        title="Eliminar tratamiento"
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </CardContent>
@@ -350,28 +345,12 @@ export default function TreatmentsPage() {
                 // Vista de lista
                 <Card key={treatment.id} className={`hover:shadow-sm transition-shadow ${treatment.active === false ? 'opacity-60' : ''}`}>
                   <CardContent className="p-4">
-                    <div className="flex items-start space-x-4">
-                      {/* Imagen pequeña */}
-                      <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
-                        {treatment.imageUrl ? (
-                          <img 
-                            src={treatment.imageUrl} 
-                            alt={treatment.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <ImageIcon className="h-6 w-6 text-muted-foreground" />
-                        )}
-                      </div>
-                      
+                    <div className="flex items-center justify-between">
                       {/* Contenido */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between">
+                        <div className="flex items-center justify-between">
                           <div className="flex-1 min-w-0">
                             <h3 className="font-semibold text-lg truncate">{treatment.name}</h3>
-                            <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
-                              {treatment.description}
-                            </p>
                             
                             <div className="flex flex-wrap items-center gap-2 mt-2">
                               <Badge variant="outline" className="text-xs">
@@ -389,7 +368,7 @@ export default function TreatmentsPage() {
                                 </div>
                                 <div className="flex items-center space-x-1">
                                   <DollarSign className="h-3 w-3" />
-                                  <span>${treatment.basePrice}</span>
+                                  <span>{treatment.basePrice ? `$${treatment.basePrice}` : 'Sin precio'}</span>
                                 </div>
                               </div>
                             </div>

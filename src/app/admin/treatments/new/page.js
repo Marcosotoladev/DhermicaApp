@@ -5,39 +5,71 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ArrowLeft, Upload, X, AlertTriangle, Loader2 } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, Loader2 } from 'lucide-react'
 import { Button } from '../../../../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../../components/ui/card'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../../../../components/ui/form'
 import { Input } from '../../../../components/ui/input'
-import { Textarea } from '../../../../components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../../components/ui/select'
 import { Checkbox } from '../../../../components/ui/checkbox'
 import { Badge } from '../../../../components/ui/badge'
 import { Alert, AlertDescription } from '../../../../components/ui/alert'
-import { treatmentSchema, TREATMENT_CATEGORIES, MEDICAL_RESTRICTIONS } from '../../../../lib/validations'
 import { treatmentService } from '../../../../lib/firebase-services'
 import { toast } from 'sonner'
+import * as z from 'zod'
+
+// Schema simplificado para tratamientos
+const treatmentSchema = z.object({
+  name: z.string().min(1, 'El nombre es obligatorio'),
+  duration: z.number().min(15, 'Duración mínima: 15 minutos').max(480, 'Duración máxima: 8 horas'),
+  basePrice: z.number().min(0, 'El precio no puede ser negativo').optional(),
+  category: z.string().min(1, 'La categoría es obligatoria'),
+  medicalRestrictions: z.array(z.string()).optional(),
+  active: z.boolean().default(true)
+})
+
+// Categorías actualizadas
+const TREATMENT_CATEGORIES = [
+  'Aparatologia',
+  'Cejas',
+  'Corporales',
+  'Depilacion',
+  'Faciales',
+  'Manos',
+  'Pestañas',
+  'Pies',
+  'HiFu',
+  'Liposonix',
+  'Definitiva',
+  'Otro'
+]
+
+// Restricciones médicas actualizadas
+const MEDICAL_RESTRICTIONS = [
+  'Diabetes',
+  'Cancer',
+  'Tatuajes',
+  'Alergias',
+  'Embarazo',
+  'Cirugias',
+  'Otro'
+]
 
 /**
  * Página para crear nuevo tratamiento
- * Formulario completo con validaciones y subida de imagen
+ * Formulario simplificado con solo nombre, duración, precio opcional y categoría
  */
 export default function NewTreatmentPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [imageFile, setImageFile] = useState(null)
-  const [imagePreview, setImagePreview] = useState('')
 
   const form = useForm({
     resolver: zodResolver(treatmentSchema),
     defaultValues: {
       name: '',
-      description: '',
       duration: 60,
-      basePrice: 0,
+      basePrice: undefined,
       category: '',
-      imageUrl: '',
       medicalRestrictions: [],
       active: true
     }
@@ -46,26 +78,16 @@ export default function NewTreatmentPage() {
   const onSubmit = async (data) => {
     setLoading(true)
     try {
-      let imageUrl = ''
-      
-      // Subir imagen si existe
-      if (imageFile) {
-        // Aquí integrarías con Cloudinary
-        // Por ahora simulamos la URL
-        imageUrl = imagePreview
-      }
-
       const treatmentData = {
         ...data,
-        imageUrl,
         duration: Number(data.duration),
-        basePrice: Number(data.basePrice)
+        basePrice: data.basePrice ? Number(data.basePrice) : null
       }
 
       const treatmentId = await treatmentService.create(treatmentData)
       
       toast.success('Tratamiento creado exitosamente')
-      router.push(`/admin/treatments/${treatmentId}`)
+      router.push('/admin/treatments')
       
     } catch (error) {
       console.error('Error creating treatment:', error)
@@ -73,29 +95,6 @@ export default function NewTreatmentPage() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleImageChange = (event) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        toast.error('La imagen no puede superar los 5MB')
-        return
-      }
-      
-      setImageFile(file)
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        setImagePreview(e.target?.result || '')
-      }
-      reader.readAsDataURL(file)
-    }
-  }
-
-  const removeImage = () => {
-    setImageFile(null)
-    setImagePreview('')
-    form.setValue('imageUrl', '')
   }
 
   const medicalRestrictions = form.watch('medicalRestrictions') || []
@@ -133,9 +132,9 @@ export default function NewTreatmentPage() {
             {/* Información básica */}
             <Card>
               <CardHeader>
-                <CardTitle>Información Básica</CardTitle>
+                <CardTitle>Información del Tratamiento</CardTitle>
                 <CardDescription>
-                  Datos principales del tratamiento
+                  Datos principales del servicio
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -149,26 +148,7 @@ export default function NewTreatmentPage() {
                       <FormLabel>Nombre del Tratamiento *</FormLabel>
                       <FormControl>
                         <Input 
-                          placeholder="Ej: Limpieza Facial Profunda"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {/* Descripción */}
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Descripción *</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="Describe los beneficios y el proceso del tratamiento..."
-                          className="min-h-[100px]"
+                          placeholder="Ej: Limpieza Facial"
                           {...field}
                         />
                       </FormControl>
@@ -202,19 +182,7 @@ export default function NewTreatmentPage() {
                     </FormItem>
                   )}
                 />
-              </CardContent>
-            </Card>
 
-            {/* Duración y Precio */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Duración y Precio</CardTitle>
-                <CardDescription>
-                  Configura el tiempo y costo del tratamiento
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   {/* Duración */}
                   <FormField
@@ -227,7 +195,7 @@ export default function NewTreatmentPage() {
                           <Input 
                             type="number"
                             min="15"
-                            max="240"
+                            max="480"
                             step="15"
                             {...field}
                             onChange={(e) => field.onChange(Number(e.target.value))}
@@ -244,15 +212,16 @@ export default function NewTreatmentPage() {
                     name="basePrice"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Precio Base ($) *</FormLabel>
+                        <FormLabel>Precio ($) - Opcional</FormLabel>
                         <FormControl>
                           <Input 
                             type="number"
                             min="0"
                             step="100"
-                            placeholder="0"
+                            placeholder="Dejar vacío si no aplica"
                             {...field}
-                            onChange={(e) => field.onChange(Number(e.target.value))}
+                            value={field.value || ''}
+                            onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
                           />
                         </FormControl>
                         <FormMessage />
@@ -260,61 +229,6 @@ export default function NewTreatmentPage() {
                     )}
                   />
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Imagen del tratamiento */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Imagen del Tratamiento</CardTitle>
-                <CardDescription>
-                  Agrega una imagen representativa (opcional)
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                
-                {!imagePreview ? (
-                  <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
-                    <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Haz clic para subir una imagen o arrastra aquí
-                    </p>
-                    <Input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageChange}
-                      className="hidden"
-                      id="image-upload"
-                    />
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      onClick={() => document.getElementById('image-upload')?.click()}
-                    >
-                      Seleccionar Imagen
-                    </Button>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Tamaño máximo: 5MB. Formatos: JPG, PNG, GIF
-                    </p>
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <img 
-                      src={imagePreview} 
-                      alt="Preview" 
-                      className="w-full h-48 object-cover rounded-lg"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={removeImage}
-                      className="absolute top-2 right-2"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
               </CardContent>
             </Card>
 
@@ -359,8 +273,8 @@ export default function NewTreatmentPage() {
                                       }}
                                     />
                                   </FormControl>
-                                  <FormLabel className="text-sm font-normal capitalize">
-                                    {restriction.replace('_', ' ')}
+                                  <FormLabel className="text-sm font-normal">
+                                    {restriction}
                                   </FormLabel>
                                 </FormItem>
                               )
@@ -383,7 +297,7 @@ export default function NewTreatmentPage() {
                       <div className="flex flex-wrap gap-2">
                         {medicalRestrictions.map((restriction) => (
                           <Badge key={restriction} variant="outline" className="border-yellow-300 text-yellow-800">
-                            {restriction.replace('_', ' ')}
+                            {restriction}
                           </Badge>
                         ))}
                       </div>

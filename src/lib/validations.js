@@ -15,25 +15,17 @@ export const treatmentSchema = z.object({
     .min(2, 'El nombre debe tener al menos 2 caracteres')
     .max(100, 'El nombre no puede exceder 100 caracteres'),
   
-  description: z.string()
-    .min(10, 'La descripción debe tener al menos 10 caracteres')
-    .max(500, 'La descripción no puede exceder 500 caracteres'),
-  
   duration: z.number()
     .min(15, 'La duración mínima es 15 minutos')
-    .max(240, 'La duración máxima es 4 horas'),
+    .max(480, 'La duración máxima es 8 horas'),
   
   basePrice: z.number()
-    .min(0, 'El precio debe ser mayor a 0')
-    .max(999999, 'El precio es demasiado alto'),
+    .min(0, 'El precio debe ser mayor o igual a 0')
+    .max(999999, 'El precio es demasiado alto')
+    .optional(),
   
   category: z.string()
     .min(1, 'Selecciona una categoría'),
-  
-  imageUrl: z.string()
-    .url('URL de imagen inválida')
-    .optional()
-    .or(z.literal('')),
   
   medicalRestrictions: z.array(z.string())
     .default([]),
@@ -81,12 +73,14 @@ export const professionalSchema = z.object({
 // =============================================================================
 
 export const medicalInfoSchema = z.object({
-  diabetes: z.boolean().default(false),
-  cancer: z.boolean().default(false),
-  tattoos: z.boolean().default(false),
-  allergies: z.string().max(200, 'Máximo 200 caracteres').default(''),
-  medications: z.string().max(200, 'Máximo 200 caracteres').default(''),
-  other: z.string().max(300, 'Máximo 300 caracteres').default('')
+  Diabetes: z.boolean().default(false),
+  Cancer: z.boolean().default(false),
+  Tatuajes: z.boolean().default(false),
+  Alergias: z.boolean().default(false),
+  Embarazo: z.boolean().default(false),
+  Cirugias: z.boolean().default(false),
+  Otro: z.boolean().default(false),
+  observations: z.string().max(300, 'Máximo 300 caracteres').default('')
 })
 
 export const clientSchema = z.object({
@@ -220,7 +214,7 @@ export const registerSchema = z.object({
 export function validateMedicalRestrictions(clientMedicalInfo, treatmentRestrictions) {
   const warnings = []
   
-  if (!clientMedicalInfo || !treatmentRestrictions) {
+  if (!clientMedicalInfo || !treatmentRestrictions || treatmentRestrictions.length === 0) {
     return { isValid: true, warnings: [] }
   }
   
@@ -263,22 +257,28 @@ export function validateWorkingHours(start, end) {
 // =============================================================================
 
 export const MEDICAL_RESTRICTIONS = [
-  'diabetes',
-  'cancer', 
-  'tattoos',
-  'pregnancy',
-  'hypertension',
-  'skin_conditions'
+  'Diabetes',
+  'Cancer',
+  'Tatuajes',
+  'Alergias',
+  'Embarazo',
+  'Cirugias',
+  'Otro'
 ]
 
 export const TREATMENT_CATEGORIES = [
-  'Facial',
-  'Corporal',
-  'Depilación',
-  'Rejuvenecimiento',
-  'Limpieza',
-  'Hidratación',
-  'Masajes'
+  'Aparatologia',
+  'Cejas',
+  'Corporales',
+  'Depilacion',
+  'Faciales',
+  'Manos',
+  'Pestañas',
+  'Pies',
+  'HiFu',
+  'Liposonix',
+  'Definitiva',
+  'Otro'
 ]
 
 export const PROFESSIONAL_SPECIALTIES = [
@@ -288,5 +288,9 @@ export const PROFESSIONAL_SPECIALTIES = [
   'Microdermoabrasión',
   'Radiofrecuencia',
   'Mesoterapia',
-  'Masajes Terapéuticos'
+  'Masajes Terapéuticos',
+  'Aparatología',
+  'Cejas y Pestañas',
+  'HiFu',
+  'Liposonix'
 ]
