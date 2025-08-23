@@ -239,15 +239,15 @@ export default function AdminDashboard() {
             </div>
           </div>
           
+          {/* Content skeleton */}
+          <Skeleton className="h-64 rounded-xl" />
+          
           {/* Quick actions skeleton */}
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             {[...Array(5)].map((_, i) => (
               <Skeleton key={i} className="h-24 lg:h-32 rounded-xl" />
             ))}
           </div>
-          
-          {/* Content skeleton */}
-          <Skeleton className="h-64 rounded-xl" />
           
           {/* Stats skeleton */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -349,37 +349,7 @@ export default function AdminDashboard() {
       {/* Contenido principal */}
       <div className="max-w-7xl mx-auto p-4 lg:p-6 space-y-6">
         
-        {/* Acciones rápidas - Movidas al inicio */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg lg:text-xl">Acciones Rápidas</CardTitle>
-            <CardDescription>Funciones principales del sistema</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4">
-              {quickActions.map((action) => (
-                <Button
-                  key={action.title}
-                  variant="outline"
-                  className={`h-auto p-4 lg:p-6 flex flex-col items-center space-y-2 lg:space-y-3 border-2 transition-all ${
-                    action.urgent ? 'border-primary/50 bg-primary/5' : 'hover:border-primary/30'
-                  }`}
-                  onClick={() => router.push(action.href)}
-                >
-                  <div className={`p-2 lg:p-3 rounded-lg ${action.color}`}>
-                    <action.icon className="h-5 w-5 lg:h-6 lg:w-6" />
-                  </div>
-                  <div className="text-center">
-                    <p className="font-medium text-sm lg:text-base">{action.title}</p>
-                    <p className="text-xs lg:text-sm text-muted-foreground">{action.description}</p>
-                  </div>
-                </Button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Citas del día - Ahora ocupa todo el ancho */}
+        {/* 1. AGENDA DE HOY - Primera sección */}
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
@@ -456,7 +426,37 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* Métricas principales - Movidas al final */}
+        {/* 2. ACCIONES RÁPIDAS - Segunda sección */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg lg:text-xl">Acciones Rápidas</CardTitle>
+            <CardDescription>Funciones principales del sistema</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4">
+              {quickActions.map((action) => (
+                <Button
+                  key={action.title}
+                  variant="outline"
+                  className={`h-auto p-4 lg:p-6 flex flex-col items-center space-y-2 lg:space-y-3 border-2 transition-all ${
+                    action.urgent ? 'border-primary/50 bg-primary/5' : 'hover:border-primary/30'
+                  }`}
+                  onClick={() => router.push(action.href)}
+                >
+                  <div className={`p-2 lg:p-3 rounded-lg ${action.color}`}>
+                    <action.icon className="h-5 w-5 lg:h-6 lg:w-6" />
+                  </div>
+                  <div className="text-center">
+                    <p className="font-medium text-sm lg:text-base">{action.title}</p>
+                    <p className="text-xs lg:text-sm text-muted-foreground">{action.description}</p>
+                  </div>
+                </Button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 3. RESUMEN DEL DÍA - Tercera sección */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-lg lg:text-xl">Resumen del Día</CardTitle>

@@ -28,7 +28,10 @@ import {
   Award,
   Zap,
   AlertCircle,
-  X
+  X,
+  Users,
+  Briefcase,
+  Tag
 } from 'lucide-react'
 import { Button } from '../../../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card'
@@ -255,18 +258,32 @@ export default function ClientDashboard() {
       description: 'Ver agenda'
     },
     {
+      title: 'Promociones',
+      icon: Tag,
+      href: '/promotions',
+      color: 'bg-orange-500 text-white',
+      description: 'Ofertas especiales'
+    },
+    {
+      title: 'Tratamientos',
+      icon: Briefcase,
+      href: '/treatments',
+      color: 'bg-purple-500 text-white',
+      description: 'Ver servicios'
+    },
+    {
+      title: 'Profesionales',
+      icon: Users,
+      href: '/client/professionals',
+      color: 'bg-green-500 text-white',
+      description: 'Conoce el equipo'
+    },
+    {
       title: 'Mi Perfil',
       icon: User,
       href: '/client/profile',
-      color: 'bg-green-500 text-white',
+      color: 'bg-gray-500 text-white',
       description: 'Editar datos'
-    },
-    {
-      title: 'Historial',
-      icon: Clock,
-      href: '/client/history',
-      color: 'bg-purple-500 text-white',
-      description: 'Ver historial'
     }
   ]
 
@@ -289,14 +306,12 @@ export default function ClientDashboard() {
         </div>
         
         <div className="p-4 space-y-6">
-          <div className="grid grid-cols-2 gap-4">
-            {[...Array(4)].map((_, i) => (
+          <Skeleton className="h-40 rounded-xl" />
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+            {[...Array(6)].map((_, i) => (
               <Skeleton key={i} className="h-24 rounded-xl" />
             ))}
           </div>
-          <Skeleton className="h-40 rounded-xl" />
-          <Skeleton className="h-32 rounded-xl" />
-          <Skeleton className="h-48 rounded-xl" />
         </div>
       </div>
     )
@@ -323,6 +338,7 @@ export default function ClientDashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 to-secondary/5">
       
+      {/* Header - MANTENIDO ORIGINAL */}
       <div className="border-b border-border/50 sticky top-0 z-10 backdrop-blur-sm bg-card/95">
         <div className="p-4">
           <div className="flex items-center justify-between mb-4">
@@ -449,178 +465,13 @@ export default function ClientDashboard() {
 
       <div className="p-4 space-y-6">
         
-        {stats.nextAppointment && (
-          <Card className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground border-0 overflow-hidden relative">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-16 translate-x-16"></div>
-            <CardContent className="p-6 relative">
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <Badge variant="secondary" className="bg-white/20 text-primary-foreground border-0">
-                      Próxima cita
-                    </Badge>
-                    <Zap className="h-4 w-4" />
-                  </div>
-                  <h3 className="text-lg font-bold mb-2 truncate">
-                    {stats.nextAppointment.treatmentName}
-                  </h3>
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-1 sm:space-y-0 text-sm text-primary-foreground/90">
-                    <div className="flex items-center space-x-1">
-                      <Calendar className="h-4 w-4 flex-shrink-0" />
-                      <span className="truncate">
-                        {formatDate(stats.nextAppointment.date.toDate ? stats.nextAppointment.date.toDate() : stats.nextAppointment.date)}
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <Clock className="h-4 w-4 flex-shrink-0" />
-                      <span>{stats.nextAppointment.startTime}</span>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <User className="h-4 w-4 flex-shrink-0" />
-                      <span className="truncate">{stats.nextAppointment.professionalName}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right flex-shrink-0 ml-4">
-                  <Button 
-                    variant="secondary" 
-                    size="sm"
-                    onClick={() => router.push('/client/appointments')}
-                    className="bg-white/20 hover:bg-white/30 text-primary-foreground border-0"
-                  >
-                    Ver detalles
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <div className="grid grid-cols-2 gap-4 sm:hidden">
-          <Card className="text-center">
-            <CardContent className="p-4">
-              <div className="flex flex-col items-center space-y-2">
-                <div className="p-3 bg-blue-100 rounded-full">
-                  <Calendar className="h-6 w-6 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-foreground">{stats.totalAppointments}</p>
-                  <p className="text-xs text-muted-foreground">Citas realizadas</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="text-center">
-            <CardContent className="p-4">
-              <div className="flex flex-col items-center space-y-2">
-                <div className="p-3 bg-green-100 rounded-full">
-                  <Heart className="h-6 w-6 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-foreground">{upcomingAppointments.length}</p>
-                  <p className="text-xs text-muted-foreground">Próximas citas</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="hidden sm:grid grid-cols-2 md:grid-cols-4 gap-6">
-          <Card className="text-center">
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-3">
-                <div className="p-3 bg-blue-100 rounded-full">
-                  <Calendar className="h-6 w-6 text-blue-600" />
-                </div>
-                <div className="text-left">
-                  <p className="text-2xl font-bold text-foreground">{stats.totalAppointments}</p>
-                  <p className="text-sm text-muted-foreground">Citas realizadas</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="text-center">
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-3">
-                <div className="p-3 bg-green-100 rounded-full">
-                  <Heart className="h-6 w-6 text-green-600" />
-                </div>
-                <div className="text-left">
-                  <p className="text-2xl font-bold text-foreground">{upcomingAppointments.length}</p>
-                  <p className="text-sm text-muted-foreground">Próximas citas</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="text-center">
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-3">
-                <div className="p-3 bg-rose-100 rounded-full">
-                  <CreditCard className="h-6 w-6 text-rose-600" />
-                </div>
-                <div className="text-left">
-                  <p className="text-2xl font-bold text-foreground">${stats.totalSpent.toLocaleString()}</p>
-                  <p className="text-sm text-muted-foreground">Total invertido</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="text-center">
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-3">
-                <div className="p-3 bg-yellow-100 rounded-full">
-                  <Award className="h-6 w-6 text-yellow-600" />
-                </div>
-                <div className="text-left">
-                  <p className="text-2xl font-bold text-foreground">{stats.completedThisMonth}</p>
-                  <p className="text-sm text-muted-foreground">Este mes</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center space-x-2">
-              <Zap className="h-5 w-5 text-primary" />
-              <span>Acciones Rápidas</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {quickActions.map((action) => (
-                <Button
-                  key={action.title}
-                  variant="outline"
-                  className={`h-auto p-4 flex flex-col items-center space-y-2 border-2 hover:border-primary/50 transition-all ${
-                    action.featured ? 'border-primary/30 bg-primary/5' : ''
-                  }`}
-                  onClick={() => router.push(action.href)}
-                >
-                  <div className={`p-2 rounded-lg ${action.color}`}>
-                    <action.icon className="h-5 w-5" />
-                  </div>
-                  <div className="text-center">
-                    <p className="font-medium text-sm">{action.title}</p>
-                    <p className="text-xs text-muted-foreground">{action.description}</p>
-                  </div>
-                </Button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
+        {/* 1. MIS PRÓXIMAS VISITAS - Primera sección */}
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg flex items-center space-x-2">
                 <Calendar className="h-5 w-5 text-primary" />
-                <span>Mis Próximas Citas</span>
+                <span>Mis Próximas Visitas</span>
               </CardTitle>
               {upcomingAppointments.length > 3 && (
                 <Button 
@@ -635,9 +486,58 @@ export default function ClientDashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            {upcomingAppointments.length > 0 ? (
+            {/* Próxima cita destacada */}
+            {stats.nextAppointment && (
+              <Card className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground border-0 overflow-hidden relative mb-4">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-16 translate-x-16"></div>
+                <CardContent className="p-4 relative">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <Badge variant="secondary" className="bg-white/20 text-primary-foreground border-0 text-xs">
+                          Próxima cita
+                        </Badge>
+                        <Zap className="h-4 w-4" />
+                      </div>
+                      <h3 className="text-lg font-bold mb-2 truncate">
+                        {stats.nextAppointment.treatmentName}
+                      </h3>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-1 sm:space-y-0 text-sm text-primary-foreground/90">
+                        <div className="flex items-center space-x-1">
+                          <Calendar className="h-4 w-4 flex-shrink-0" />
+                          <span className="truncate">
+                            {formatDate(stats.nextAppointment.date.toDate ? stats.nextAppointment.date.toDate() : stats.nextAppointment.date)}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <Clock className="h-4 w-4 flex-shrink-0" />
+                          <span>{stats.nextAppointment.startTime}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <User className="h-4 w-4 flex-shrink-0" />
+                          <span className="truncate">{stats.nextAppointment.professionalName}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0 ml-4">
+                      <Button 
+                        variant="secondary" 
+                        size="sm"
+                        onClick={() => router.push('/client/appointments')}
+                        className="bg-white/20 hover:bg-white/30 text-primary-foreground border-0"
+                      >
+                        Ver detalles
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Lista de próximas citas */}
+            {upcomingAppointments.length > 1 ? (
               <div className="space-y-3">
-                {upcomingAppointments.slice(0, 3).map((appointment) => (
+                {upcomingAppointments.slice(1, 4).map((appointment) => (
                   <div
                     key={appointment.id}
                     className="flex items-center justify-between p-4 bg-gradient-to-r from-muted/50 to-muted/30 rounded-lg border hover:shadow-sm transition-shadow cursor-pointer"
@@ -669,7 +569,7 @@ export default function ClientDashboard() {
                   </div>
                 ))}
               </div>
-            ) : (
+            ) : upcomingAppointments.length === 0 ? (
               <div className="text-center py-8">
                 <div className="p-4 bg-muted/30 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
                   <Calendar className="h-8 w-8 text-muted-foreground" />
@@ -683,133 +583,43 @@ export default function ClientDashboard() {
                   Agendar Cita
                 </Button>
               </div>
-            )}
+            ) : null}
           </CardContent>
         </Card>
 
-        {recentAppointments.length > 0 && (
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg flex items-center space-x-2">
-                  <Clock className="h-5 w-5 text-primary" />
-                  <span>Historial Reciente</span>
-                </CardTitle>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => router.push('/client/history')}
+        {/* 2. ACCIONES RÁPIDAS - Segunda sección */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center space-x-2">
+              <Zap className="h-5 w-5 text-primary" />
+              <span>Acciones Rápidas</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
+              {quickActions.map((action) => (
+                <Button
+                  key={action.title}
+                  variant="outline"
+                  className={`h-auto p-4 flex flex-col items-center space-y-2 border-2 hover:border-primary/50 transition-all ${
+                    action.featured ? 'border-primary/30 bg-primary/5' : ''
+                  }`}
+                  onClick={() => router.push(action.href)}
                 >
-                  Ver todo
-                  <ChevronRight className="h-4 w-4 ml-1" />
+                  <div className={`p-2 rounded-lg ${action.color}`}>
+                    <action.icon className="h-5 w-5" />
+                  </div>
+                  <div className="text-center">
+                    <p className="font-medium text-sm">{action.title}</p>
+                    <p className="text-xs text-muted-foreground">{action.description}</p>
+                  </div>
                 </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {recentAppointments.slice(0, 3).map((appointment) => (
-                  <div
-                    key={appointment.id}
-                    className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-                    onClick={() => router.push('/client/history')}
-                  >
-                    <div className="flex items-center space-x-3 flex-1 min-w-0">
-                      <div className="p-2 bg-green-100 rounded-lg flex-shrink-0">
-                        <Clock className="h-4 w-4 text-green-600" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-sm truncate">{appointment.treatmentName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatDate(appointment.date.toDate ? appointment.date.toDate() : appointment.date)}
-                          <span className="hidden sm:inline"> • {appointment.professionalName}</span>
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2 flex-shrink-0">
-                      {appointment.price && (
-                        <Badge variant="outline" className="text-xs hidden sm:inline-flex">
-                          ${appointment.price.toLocaleString()}
-                        </Badge>
-                      )}
-                      <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
-                        Completado
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
-        {clientData && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center space-x-2">
-                <User className="h-5 w-5 text-primary" />
-                <span>Mi Información</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">Email</span>
-                    </div>
-                    <span className="text-sm font-medium truncate max-w-[180px]">{clientData.email}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Phone className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">Teléfono</span>
-                    </div>
-                    <span className="text-sm font-medium">{clientData.phone}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Star className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">Miembro desde</span>
-                    </div>
-                    <span className="text-sm font-medium">{getMembershipDuration()}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Heart className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">Favorito</span>
-                    </div>
-                    <span className="text-sm font-medium truncate max-w-[120px]">{stats.favoriteService}</span>
-                  </div>
-                </div>
-                
-                <div className="pt-4 border-t border-border">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Button
-                      variant="outline"
-                      onClick={() => router.push('/client/profile')}
-                      size="sm"
-                      className="w-full"
-                    >
-                      <Settings className="h-4 w-4 mr-2" />
-                      Actualizar perfil
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => router.push('/client/history')}
-                      size="sm"
-                      className="w-full"
-                    >
-                      <Activity className="h-4 w-4 mr-2" />
-                      Ver historial completo
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
+        {/* Tip motivacional */}
         <Card className="bg-gradient-to-r from-secondary to-secondary/80 text-secondary-foreground border-0">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -840,4 +650,4 @@ export default function ClientDashboard() {
       </div>
     </div>
   )
-}
+}34

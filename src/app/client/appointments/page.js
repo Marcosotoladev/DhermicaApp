@@ -3,46 +3,54 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import {
-  Calendar,
-  Clock,
-  User,
-  MapPin,
-  ArrowLeft,
+import { useAuthState } from 'react-firebase-hooks/auth'
+import { auth, db } from '../../../lib/firebase'
+import { doc, getDoc, query, collection, where, orderBy, getDocs } from 'firebase/firestore'
+import { 
+  Calendar, 
+  Clock, 
+  User, 
+  ArrowLeft, 
+  Plus, 
   Filter,
-  ChevronDown,
-  TrendingUp,
-  MoreVertical,
-  X,
+  Search,
+  Edit,
+  MapPin,
+  Phone,
   AlertCircle,
-  Plus,
   CheckCircle,
-  Star
+  RefreshCw,
+  Eye,
+  Calendar as CalendarIcon,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react'
 import { Button } from '../../../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card'
 import { Badge } from '../../../components/ui/badge'
+import { Input } from '../../../components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '../../../components/ui/sheet'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../../components/ui/dropdown-menu'
 import { Skeleton } from '../../../components/ui/skeleton'
-import { useAuthStore } from '../../../store/auth'
-import { appointmentService, treatmentService, professionalService } from '../../../lib/firebase-services'
-import { formatDate, formatTime, formatDateTime } from '../../../lib/time-utils'
+import { formatDate, formatTime, isToday, isFuture } from '../../../lib/time-utils'
+import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "../../../components/ui/dialog"
 
-/**
- * Página de citas del cliente - Optimizada para móvil
- * Muestra todas las citas (pasadas y futuras) del cliente
- */
-export default function ClientAppointmentsPage() {
+export default function ClientAppointments() {
   const router = useRouter()
-  const { user } = useAuthStore()
+  const [user, loading, error] = useAuthState(auth)
   const [appointments, setAppointments] = useState([])
   const [filteredAppointments, setFilteredAppointments] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('all') // 'all', 'upcoming', 'past'
-  const [showStats, setShowStats] = useState(false)
-  const [showFilters, setShowFilters] = useState(false)
+  const [loadingData, setLoadingData] = useState(true)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [sortOrder, setSortOrder] = useState('desc') // desc = más recientes primero
 
   useEffect(() => {
     if (user) {
@@ -51,161 +59,159 @@ export default function ClientAppointmentsPage() {
   }, [user])
 
   useEffect(() => {
-    filterAppointments()
-  }, [appointments, filter])
+    filterAndSortAppointments()
+  }, [appointments, searchTerm, statusFilter, sortOrder])
 
   const loadAppointments = async () => {
     if (!user) return
 
-    setLoading(true)
+    setLoadingData(true)
+    
     try {
-      // Cargar todas las citas del cliente
-      const appointmentsData = await appointmentService.getByClient(user.uid)
-
-      // VALIDAR QUE SEA UN ARRAY
-      if (!Array.isArray(appointmentsData)) {
-        console.log('No appointments found or invalid data format')
-        setAppointments([])
-        return
-      }
-
-      // Enriquecer con datos de tratamientos y profesionales
-      const enrichedAppointments = await Promise.all(
-        appointmentsData.map(async (appointment) => {
-          let treatment = null
-          let professional = null
-
-          try {
-            if (appointment.treatmentId) {
-              treatment = await treatmentService.getById(appointment.treatmentId)
-            }
-          } catch (e) {
-            console.warn('Error loading treatment:', e)
-          }
-
-          try {
-            if (appointment.professionalId) {
-              professional = await professionalService.getById(appointment.professionalId)
-            }
-          } catch (e) {
-            console.warn('Error loading professional:', e)
-          }
-
-          const appointmentDate = appointment.date.toDate ? appointment.date.toDate() : new Date(appointment.date)
-
-          return {
-            ...appointment,
-            treatment,
-            professional,
-            appointmentDate,
-            isPast: appointmentDate < new Date()
-          }
-        })
+      const appointmentsQuery = query(
+        collection(db, 'appointments'),
+        where('clientId', '==', user.uid),
+        orderBy('date', 'desc')
       )
 
-      // Ordenar por fecha (más recientes primero)
-      enrichedAppointments.sort((a, b) => b.appointmentDate - a.appointmentDate)
+      const appointmentsSnapshot = await getDocs(appointmentsQuery)
+      const appointmentsList = []
+      
+      for (const docSnap of appointmentsSnapshot.docs) {
+        const appointmentData = docSnap.data()
+        
+        if (appointmentData.date && appointmentData.startTime) {
+          let treatmentName = 'Tratamiento'
+          let professionalName = 'Profesional'
+          let professionalPhone = ''
+          let treatmentPrice = 0
+          
+          // Cargar información del tratamiento
+          if (appointmentData.treatmentId) {
+            try {
+              const treatmentDoc = await getDoc(doc(db, 'treatments', appointmentData.treatmentId))
+              if (treatmentDoc.exists()) {
+                const treatmentData = treatmentDoc.data()
+                treatmentName = treatmentData.name
+                treatmentPrice = treatmentData.basePrice || 0
+              }
+            } catch (e) {
+              console.warn('Error cargando tratamiento:', e)
+            }
+          }
+          
+          // Cargar información del profesional
+          if (appointmentData.professionalId) {
+            try {
+              const professionalDoc = await getDoc(doc(db, 'professionals', appointmentData.professionalId))
+              if (professionalDoc.exists()) {
+                const professionalData = professionalDoc.data()
+                professionalName = professionalData.name
+                professionalPhone = professionalData.phone || ''
+              }
+            } catch (e) {
+              console.warn('Error cargando profesional:', e)
+            }
+          }
 
-      setAppointments(enrichedAppointments)
+          appointmentsList.push({
+            id: docSnap.id,
+            ...appointmentData,
+            treatmentName,
+            professionalName,
+            professionalPhone,
+            treatmentPrice
+          })
+        }
+      }
+
+      setAppointments(appointmentsList)
     } catch (error) {
-      console.error('Error loading appointments:', error)
-      setAppointments([]) // ASEGURAR QUE SIEMPRE SEA UN ARRAY
+      console.error('Error cargando citas:', error)
     } finally {
-      setLoading(false)
+      setLoadingData(false)
     }
   }
 
-  const filterAppointments = () => {
-    let filtered = appointments
+  const filterAndSortAppointments = () => {
+    let filtered = appointments.filter(appointment => {
+      const matchesSearch = appointment.treatmentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           appointment.professionalName.toLowerCase().includes(searchTerm.toLowerCase())
+      
+      if (!matchesSearch) return false
+      
+      const now = new Date()
+      const appointmentDate = appointment.date.toDate ? appointment.date.toDate() : new Date(appointment.date)
+      
+      switch (statusFilter) {
+        case 'upcoming':
+          return appointmentDate >= now
+        case 'past':
+          return appointmentDate < now
+        case 'today':
+          return isToday(appointmentDate)
+        default:
+          return true
+      }
+    })
 
-    if (filter === 'upcoming') {
-      filtered = appointments.filter(apt => !apt.isPast)
-    } else if (filter === 'past') {
-      filtered = appointments.filter(apt => apt.isPast)
-    }
+    // Ordenar por fecha
+    filtered.sort((a, b) => {
+      const dateA = a.date.toDate ? a.date.toDate() : new Date(a.date)
+      const dateB = b.date.toDate ? b.date.toDate() : new Date(b.date)
+      
+      if (sortOrder === 'desc') {
+        return dateB - dateA // Más recientes primero
+      } else {
+        return dateA - dateB // Más antiguos primero
+      }
+    })
 
     setFilteredAppointments(filtered)
   }
 
   const getAppointmentStatus = (appointment) => {
-    if (appointment.isPast) {
-      return {
-        label: 'Completada',
-        variant: 'secondary',
-        color: 'text-muted-foreground',
-        bgColor: 'bg-green-100 text-green-800'
-      }
-    } else {
-      const today = new Date()
-      const diffTime = appointment.appointmentDate - today
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-
-      if (diffDays === 0) {
-        return {
-          label: 'Hoy',
-          variant: 'default',
-          color: 'text-primary',
-          bgColor: 'bg-primary text-primary-foreground'
-        }
-      } else if (diffDays === 1) {
-        return {
-          label: 'Mañana',
-          variant: 'outline',
-          color: 'text-warning',
-          bgColor: 'bg-yellow-100 text-yellow-800'
-        }
-      } else if (diffDays <= 7) {
-        return {
-          label: `En ${diffDays} días`,
-          variant: 'outline',
-          color: 'text-success',
-          bgColor: 'bg-blue-100 text-blue-800'
-        }
+    const now = new Date()
+    const appointmentDate = appointment.date.toDate ? appointment.date.toDate() : new Date(appointment.date)
+    
+    if (isToday(appointmentDate)) {
+      const appointmentTime = new Date(`${appointmentDate.toDateString()} ${appointment.startTime}`)
+      if (appointmentTime > now) {
+        return { status: 'today', label: 'Hoy', color: 'bg-blue-100 text-blue-800', icon: CalendarIcon }
       } else {
-        return {
-          label: 'Próxima',
-          variant: 'outline',
-          color: 'text-muted-foreground',
-          bgColor: 'bg-gray-100 text-gray-600'
-        }
+        return { status: 'completed', label: 'Completada', color: 'bg-green-100 text-green-800', icon: CheckCircle }
       }
+    } else if (appointmentDate > now) {
+      return { status: 'upcoming', label: 'Próxima', color: 'bg-yellow-100 text-yellow-800', icon: Clock }
+    } else {
+      return { status: 'past', label: 'Completada', color: 'bg-green-100 text-green-800', icon: CheckCircle }
     }
   }
 
-  const upcomingCount = appointments.filter(apt => !apt.isPast).length
-  const pastCount = appointments.filter(apt => apt.isPast).length
-  const totalSpent = appointments
-    .filter(apt => apt.isPast && apt.price)
-    .reduce((sum, apt) => sum + apt.price, 0)
+  // Los clientes no pueden cancelar citas - función removida
 
-  // Loading state optimizado
-  if (loading) {
+  const handleViewDetails = (appointment) => {
+    // Navegación a una página de detalles dedicada (por implementar)
+    router.push(`/client/appointments/${appointment.id}`)
+  }
+
+  if (loading || loadingData) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary/5 to-secondary/5">
         <div className="border-b border-border/50 sticky top-0 z-10 backdrop-blur-sm bg-card/95">
-          <div className="p-4">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-3">
-                <Skeleton className="h-8 w-8 rounded" />
-                <div className="space-y-2">
-                  <Skeleton className="h-6 w-32" />
-                  <Skeleton className="h-4 w-48" />
-                </div>
-              </div>
-              <Skeleton className="h-8 w-8 rounded" />
+          <div className="p-4 max-w-4xl mx-auto">
+            <div className="flex items-center space-x-4">
+              <Skeleton className="h-8 w-8" />
+              <Skeleton className="h-8 w-32" />
             </div>
           </div>
         </div>
-
-        <div className="p-4 space-y-6">
-          <div className="grid grid-cols-2 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} className="h-20 rounded-xl" />
-            ))}
-          </div>
-          <div className="space-y-4">
-            {[...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-32 rounded-xl" />
+        
+        <div className="p-4 max-w-4xl mx-auto space-y-4">
+          <Skeleton className="h-12 w-full" />
+          <div className="grid gap-4">
+            {[...Array(3)].map((_, i) => (
+              <Skeleton key={i} className="h-32 w-full" />
             ))}
           </div>
         </div>
@@ -213,347 +219,181 @@ export default function ClientAppointmentsPage() {
     )
   }
 
+  if (error || !user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary/5 to-secondary/5 p-4 flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6 text-center">
+            <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
+            <p className="text-destructive mb-4">Error de autenticación</p>
+            <Button onClick={() => router.push('/login')}>
+              Ir al login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 to-secondary/5">
-
-      {/* Header optimizado para móvil y desktop */}
+      
+      {/* Header */}
       <div className="border-b border-border/50 sticky top-0 z-10 backdrop-blur-sm bg-card/95">
-        <div className="p-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-3 flex-1 min-w-0">
+        <div className="p-4 max-w-4xl mx-auto">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                onClick={() => router.push('/client/dashboard')}
-                className="flex-shrink-0"
+                onClick={() => router.back()}
               >
-                <ArrowLeft className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Dashboard</span>
+                <ArrowLeft className="h-4 w-4" />
               </Button>
-              <div className="min-w-0 flex-1">
-                <h1 className="text-xl sm:text-3xl font-bold text-foreground truncate">Mis Citas</h1>
-                <p className="text-sm text-muted-foreground hidden sm:block">
-                  Historial completo de tus citas en Dhermica
+              <div>
+                <h1 className="text-xl font-bold text-foreground">Mis Citas</h1>
+                <p className="text-sm text-muted-foreground">
+                  {filteredAppointments.length} citas encontradas
                 </p>
               </div>
             </div>
-
-            <div className="flex items-center space-x-2 flex-shrink-0">
-              {/* Mobile Stats */}
-              <Sheet open={showStats} onOpenChange={setShowStats}>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="sm" className="sm:hidden">
-                    <TrendingUp className="h-4 w-4" />
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="bottom" className="h-[60vh]">
-                  <SheetHeader>
-                    <SheetTitle>Estadísticas de Citas</SheetTitle>
-                  </SheetHeader>
-                  <div className="space-y-6 mt-6">
-                    <div className="grid grid-cols-2 gap-4">
-                      <Card>
-                        <CardContent className="p-4 text-center">
-                          <Calendar className="h-6 w-6 text-primary mx-auto mb-2" />
-                          <p className="text-2xl font-bold">{appointments.length}</p>
-                          <p className="text-xs text-muted-foreground">Total citas</p>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="p-4 text-center">
-                          <Clock className="h-6 w-6 text-blue-600 mx-auto mb-2" />
-                          <p className="text-2xl font-bold">{upcomingCount}</p>
-                          <p className="text-xs text-muted-foreground">Próximas</p>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="p-4 text-center">
-                          <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-2" />
-                          <p className="text-2xl font-bold">{pastCount}</p>
-                          <p className="text-xs text-muted-foreground">Completadas</p>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="p-4 text-center">
-                          <Star className="h-6 w-6 text-yellow-600 mx-auto mb-2" />
-                          <p className="text-lg font-bold">${totalSpent.toLocaleString()}</p>
-                          <p className="text-xs text-muted-foreground">Total invertido</p>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  </div>
-                </SheetContent>
-              </Sheet>
-
-              {/* Mobile Filters */}
-              <Sheet open={showFilters} onOpenChange={setShowFilters}>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="sm" className="sm:hidden">
-                    <Filter className="h-4 w-4" />
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="right">
-                  <SheetHeader>
-                    <SheetTitle>Filtros</SheetTitle>
-                    <SheetDescription>
-                      Personaliza la vista de tus citas
-                    </SheetDescription>
-                  </SheetHeader>
-                  <div className="space-y-4 mt-6">
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">
-                        Mostrar citas
-                      </label>
-                      <Select value={filter} onValueChange={setFilter}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todas las citas</SelectItem>
-                          <SelectItem value="upcoming">Próximas</SelectItem>
-                          <SelectItem value="past">Completadas</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {filter !== 'all' && (
-                      <div className="pt-4 border-t">
-                        <Button
-                          variant="outline"
-                          onClick={() => setFilter('all')}
-                          className="w-full"
-                        >
-                          <X className="h-4 w-4 mr-2" />
-                          Mostrar todas
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </SheetContent>
-              </Sheet>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="hidden sm:flex">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => router.push('/treatments')}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Nueva cita
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => router.push('/client/dashboard')}>
-                    <ArrowLeft className="h-4 w-4 mr-2" />
-                    Volver al dashboard
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            
+            <Button 
+              onClick={() => router.push('/treatments')}
+              className="bg-primary hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Nueva Cita
+            </Button>
           </div>
         </div>
       </div>
 
-      <div className="p-4 space-y-6">
-
-        {/* Estadísticas compactas - Mobile */}
-        <div className="grid grid-cols-2 gap-4 sm:hidden">
-          <Card>
-            <CardContent className="p-4 text-center">
-              <Calendar className="h-6 w-6 text-primary mx-auto mb-2" />
-              <p className="text-xl font-bold">{appointments.length}</p>
-              <p className="text-xs text-muted-foreground">Total citas</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 text-center">
-              <Clock className="h-6 w-6 text-blue-600 mx-auto mb-2" />
-              <p className="text-xl font-bold">{upcomingCount}</p>
-              <p className="text-xs text-muted-foreground">Próximas</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Desktop Statistics and Filter */}
-        <div className="hidden sm:grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-2">
-                <Calendar className="h-5 w-5 text-primary" />
-                <div>
-                  <p className="text-2xl font-bold">{appointments.length}</p>
-                  <p className="text-xs text-muted-foreground">Total citas</p>
-                </div>
+      <div className="p-4 max-w-4xl mx-auto space-y-6">
+        
+        {/* Filtros y búsqueda */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-col lg:flex-row gap-4">
+              {/* Búsqueda */}
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por tratamiento o profesional..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
               </div>
-            </CardContent>
-          </Card>
+              
+              {/* Filtro por estado */}
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full lg:w-48">
+                  <SelectValue placeholder="Filtrar por estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas las citas</SelectItem>
+                  <SelectItem value="upcoming">Próximas</SelectItem>
+                  <SelectItem value="today">Hoy</SelectItem>
+                  <SelectItem value="past">Completadas</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              {/* Ordenar */}
+              <Button
+                variant="outline"
+                onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
+                className="w-full lg:w-auto"
+              >
+                {sortOrder === 'desc' ? (
+                  <>
+                    <ChevronDown className="h-4 w-4 mr-2" />
+                    Más recientes
+                  </>
+                ) : (
+                  <>
+                    <ChevronUp className="h-4 w-4 mr-2" />
+                    Más antiguos
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-2">
-                <Clock className="h-5 w-5 text-blue-600" />
-                <div>
-                  <p className="text-2xl font-bold">{upcomingCount}</p>
-                  <p className="text-xs text-muted-foreground">Próximas</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-2">
-                <CheckCircle className="h-5 w-5 text-green-600" />
-                <div>
-                  <p className="text-2xl font-bold">{pastCount}</p>
-                  <p className="text-xs text-muted-foreground">Completadas</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-2">
-                <Filter className="h-5 w-5 text-muted-foreground" />
-                <div className="flex-1">
-                  <Select value={filter} onValueChange={setFilter}>
-                    <SelectTrigger className="w-full h-8">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todas las citas</SelectItem>
-                      <SelectItem value="upcoming">Próximas</SelectItem>
-                      <SelectItem value="past">Completadas</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Mobile Filter */}
-        <div className="sm:hidden">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">
-                  {filter === 'all' ? 'Todas las citas' :
-                    filter === 'upcoming' ? 'Próximas' : 'Completadas'}
-                </span>
-                <Button variant="outline" size="sm" onClick={() => setShowFilters(true)}>
-                  <Filter className="h-4 w-4 mr-2" />
-                  Filtrar
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Lista de citas optimizada */}
+        {/* Lista de citas */}
         {filteredAppointments.length > 0 ? (
           <div className="space-y-4">
             {filteredAppointments.map((appointment) => {
               const status = getAppointmentStatus(appointment)
-
+              
               return (
-                <Card key={appointment.id} className={`hover:shadow-md transition-shadow ${appointment.isPast ? 'opacity-75' : ''
-                  }`}>
-                  <CardContent className="p-4 sm:p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 space-y-3">
-
-                        {/* Header de la cita - Mobile optimized */}
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                          <div className="flex items-center space-x-3">
-                            <div className="text-center flex-shrink-0">
-                              <p className="text-lg font-bold">
-                                {formatDate(appointment.appointmentDate, 'dd')}
-                              </p>
-                              <p className="text-xs text-muted-foreground uppercase">
-                                {formatDate(appointment.appointmentDate, 'MMM')}
-                              </p>
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <h3 className="text-base sm:text-lg font-semibold truncate">
-                                {appointment.treatment?.name || 'Tratamiento eliminado'}
-                              </h3>
-                              <p className="text-sm text-muted-foreground">
-                                {formatDate(appointment.appointmentDate, 'EEEE d \'de\' MMMM')}
-                              </p>
-                            </div>
-                          </div>
-                          <Badge className={`${status.bgColor} text-xs flex-shrink-0`}>
-                            {status.label}
-                          </Badge>
+                <Card key={appointment.id} className="hover:shadow-sm transition-shadow">
+                  <CardContent className="p-4">
+                    {/* Header con título y badge */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center space-x-3 flex-1 min-w-0">
+                        <div className="p-2 bg-primary/10 rounded-lg flex-shrink-0">
+                          <status.icon className="h-5 w-5 text-primary" />
                         </div>
-
-                        {/* Detalles de la cita - Mobile grid */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-                          <div className="flex items-center space-x-2">
-                            <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-muted-foreground text-xs">Horario</p>
-                              <p className="font-medium truncate">
-                                {formatTime(appointment.startTime)} - {formatTime(appointment.endTime)}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center space-x-2">
-                            <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-muted-foreground text-xs">Profesional</p>
-                              <p className="font-medium truncate">
-                                {appointment.professional?.name || 'No asignado'}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center space-x-2">
-                            <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-muted-foreground text-xs">Duración</p>
-                              <p className="font-medium">{appointment.duration} min</p>
-                            </div>
-                          </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-base lg:text-lg leading-tight mb-1">
+                            {appointment.treatmentName}
+                          </h3>
+                          <p className="text-sm text-muted-foreground">
+                            {appointment.professionalName}
+                          </p>
                         </div>
-
-                        {/* Información adicional - Mobile optimized */}
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-3 border-t border-border">
-                          <div className="flex flex-wrap items-center gap-2">
-                            {appointment.treatment?.category && (
-                              <Badge variant="outline" className="text-xs">
-                                {appointment.treatment.category}
-                              </Badge>
-                            )}
-                            {appointment.price && (
-                              <div className="text-sm">
-                                <span className="text-muted-foreground">$</span>
-                                <span className="font-medium text-green-600">
-                                  {appointment.price.toLocaleString()}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-
-                          {!appointment.isPast && (
-                            <div className="text-xs text-muted-foreground">
-                              ID: {appointment.id.slice(-6)}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Descripción del tratamiento - Solo desktop o si es importante */}
-                        {appointment.treatment?.description && (
-                          <div className="pt-2 border-t border-border hidden sm:block">
-                            <p className="text-sm text-muted-foreground line-clamp-2">
-                              {appointment.treatment.description}
-                            </p>
-                          </div>
+                      </div>
+                      <Badge className={`${status.color} border-0 flex-shrink-0 ml-2`}>
+                        {status.label}
+                      </Badge>
+                    </div>
+                    
+                    {/* Información de la cita */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm mb-4">
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <span>
+                          {formatDate(appointment.date.toDate ? appointment.date.toDate() : appointment.date)}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <span>{appointment.startTime}</span>
+                        {appointment.duration && (
+                          <span className="text-muted-foreground">
+                            ({appointment.duration}min)
+                          </span>
                         )}
                       </div>
+                      {appointment.treatmentPrice > 0 && (
+                        <div className="flex items-center space-x-2">
+                          <span className="font-medium text-green-600">
+                            ${appointment.treatmentPrice.toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Notas */}
+                    {appointment.notes && (
+                      <div className="mb-4 p-2 bg-muted/30 rounded text-sm">
+                        <p className="text-muted-foreground">{appointment.notes}</p>
+                      </div>
+                    )}
+                    
+                    {/* Botones de acción */}
+                    <div className="flex pt-2 border-t border-border/50">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewDetails(appointment)}
+                        className="flex-1"
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        Ver detalles
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -562,28 +402,22 @@ export default function ClientAppointmentsPage() {
           </div>
         ) : (
           <Card>
-            <CardContent className="p-8 sm:p-12 text-center">
-              <Calendar className="h-8 sm:h-12 w-8 sm:w-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-base sm:text-lg font-medium mb-2">
-                {filter === 'upcoming' ? 'No tienes citas próximas' :
-                  filter === 'past' ? 'No tienes historial de citas' :
-                    'No tienes citas registradas'}
-              </h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                {filter === 'upcoming' ? 'Agenda tu próxima cita para seguir cuidando tu bienestar' :
-                  filter === 'past' ? 'Una vez que completes tu primera cita aparecerá aquí' :
-                    'Comienza tu experiencia en Dhermica agendando tu primera cita'}
+            <CardContent className="p-8 text-center">
+              <Calendar className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+              <h3 className="font-medium text-lg mb-2">No se encontraron citas</h3>
+              <p className="text-muted-foreground mb-4">
+                {searchTerm || statusFilter !== 'all' 
+                  ? 'Intenta cambiar los filtros de búsqueda'
+                  : 'No tienes citas programadas aún'
+                }
               </p>
-              <Button onClick={() => router.push('/treatments')} size="sm">
+              <Button onClick={() => router.push('/treatments')}>
                 <Plus className="h-4 w-4 mr-2" />
-                Explorar Tratamientos
+                Agendar Primera Cita
               </Button>
             </CardContent>
           </Card>
         )}
-
-        {/* Espaciado inferior */}
-        <div className="h-20"></div>
       </div>
     </div>
   )
