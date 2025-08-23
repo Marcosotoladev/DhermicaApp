@@ -98,7 +98,7 @@ export default function AppointmentsPage() {
       try {
         await appointmentService.delete(id)
         toast.success('Cita eliminada exitosamente')
-        
+
         // Recargar citas después de eliminar
         await reloadAppointments()
       } catch (error) {
@@ -141,7 +141,7 @@ export default function AppointmentsPage() {
     try {
       await appointmentService.update(appointmentId, { status: newStatus })
       toast.success(`Cita de ${appointmentName} marcada como ${newStatus.toLowerCase()}`)
-      
+
       // Recargar citas usando la función reutilizable
       await reloadAppointments()
     } catch (error) {
@@ -173,13 +173,13 @@ export default function AppointmentsPage() {
 
   const getAppointmentsByHour = () => {
     const hourlyAppointments = {}
-    
-    // Crear slots de hora de 8 AM a 8 PM
-    for (let hour = 8; hour <= 20; hour++) {
+
+    // Crear slots de hora de 7 AM a 21 PM
+    for (let hour = 7; hour <= 21; hour++) {
       const timeKey = `${hour.toString().padStart(2, '0')}:00`
       hourlyAppointments[timeKey] = []
     }
-    
+
     // Agrupar citas por hora de inicio
     appointments.forEach(appointment => {
       const hour = appointment.startTime.split(':')[0]
@@ -188,7 +188,7 @@ export default function AppointmentsPage() {
         hourlyAppointments[timeKey].push(appointment)
       }
     })
-    
+
     return hourlyAppointments
   }
 
@@ -210,7 +210,7 @@ export default function AppointmentsPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto">
-        
+
         {/* Header - Mobile Optimized */}
         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b p-4 sm:p-6">
           <div className="flex items-center justify-between mb-4 sm:mb-0">
@@ -231,7 +231,7 @@ export default function AppointmentsPage() {
                 </p>
               </div>
             </div>
-            <Button 
+            <Button
               onClick={() => router.push('/admin/appointments/new')}
               size="sm"
               className="px-3 sm:px-4"
@@ -241,8 +241,20 @@ export default function AppointmentsPage() {
             </Button>
           </div>
 
+
           {/* Mobile Controls */}
           <div className="flex flex-col space-y-3 sm:hidden">
+          <div className='flex justify-center  '>
+            <Button
+              onClick={() => router.push('/admin/appointments/all')}
+              size="lg"
+              className="px-3 sm:px-4"
+            >
+              <span className="">Todas las citas</span>
+            </Button>
+          </div>
+
+
             {/* Date Navigation */}
             <div className="flex items-center justify-between">
               <Button variant="outline" size="sm" onClick={() => navigateDate('prev')}>
@@ -263,7 +275,7 @@ export default function AppointmentsPage() {
               <Button variant="outline" size="sm" onClick={navigateToToday} className="flex-1">
                 Hoy
               </Button>
-              
+
               <Sheet open={showCalendar} onOpenChange={setShowCalendar}>
                 <SheetTrigger asChild>
                   <Button variant="outline" size="sm" className="flex-1">
@@ -323,7 +335,7 @@ export default function AppointmentsPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                    
+
                     <div>
                       <label className="text-sm font-medium mb-3 block">
                         Vista
@@ -365,7 +377,7 @@ export default function AppointmentsPage() {
           <Card className="hidden sm:block mt-4">
             <CardContent className="p-6">
               <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                
+
                 {/* Navegación de fecha */}
                 <div className="flex items-center space-x-4">
                   <div className="flex items-center space-x-2">
@@ -434,7 +446,7 @@ export default function AppointmentsPage() {
         {/* Contenido principal */}
         <div className="p-4 sm:p-6">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
-            
+
             {/* Mini calendario - Solo desktop */}
             <Card className="hidden lg:block lg:col-span-1">
               <CardHeader>
@@ -481,10 +493,10 @@ export default function AppointmentsPage() {
                                 </p>
                               </div>
                             </div>
-                            
+
                             {/* SEPARADOR VISUAL */}
                             <div className="w-px bg-border mr-4 flex-shrink-0"></div>
-                            
+
                             <div className="flex-1 space-y-3">
                               {hourAppointments.length > 0 ? (
                                 hourAppointments.map(appointment => (
@@ -500,12 +512,12 @@ export default function AppointmentsPage() {
                                           </Badge>
                                           {getStatusBadge(appointment.status)}
                                         </div>
-                                        
+
                                         <div className="space-y-1">
                                           <p className="font-semibold text-base truncate">
                                             {appointment.clientName}
                                           </p>
-                                          
+
                                           {/* PROFESIONAL MÁS DESTACADO */}
                                           <div className="flex items-center space-x-2 mb-1">
                                             <User className="h-5 w-5 text-blue-600 flex-shrink-0" />
@@ -513,7 +525,7 @@ export default function AppointmentsPage() {
                                               {appointment.professional?.name || 'Profesional eliminado'}
                                             </span>
                                           </div>
-                                          
+
                                           {/* Tratamientos */}
                                           <div className="flex items-start space-x-2">
                                             <Briefcase className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
@@ -533,7 +545,7 @@ export default function AppointmentsPage() {
                                               )}
                                             </div>
                                           </div>
-                                          
+
                                           {(appointment.totalPrice || appointment.price) && (
                                             <Badge variant="secondary" className="text-xs mt-1 w-fit">
                                               ${(appointment.totalPrice || appointment.price).toLocaleString()}
@@ -541,7 +553,7 @@ export default function AppointmentsPage() {
                                           )}
                                         </div>
                                       </div>
-                                      
+
                                       <div className="flex flex-col sm:flex-row gap-1 flex-shrink-0">
                                         {/* Cambio de estado */}
                                         <DropdownMenu>
@@ -552,19 +564,19 @@ export default function AppointmentsPage() {
                                             </Button>
                                           </DropdownMenuTrigger>
                                           <DropdownMenuContent align="end">
-                                            <DropdownMenuItem 
+                                            <DropdownMenuItem
                                               onClick={() => handleChangeStatus(appointment.id, 'Programado', appointment.clientName)}
                                               disabled={appointment.status === 'Programado'}
                                             >
                                               <Badge variant="default" className="mr-2">Programado</Badge>
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem 
+                                            <DropdownMenuItem
                                               onClick={() => handleChangeStatus(appointment.id, 'Completado', appointment.clientName)}
                                               disabled={appointment.status === 'Completado'}
                                             >
                                               <Badge variant="secondary" className="bg-green-100 text-green-800 mr-2">Completado</Badge>
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem 
+                                            <DropdownMenuItem
                                               onClick={() => handleChangeStatus(appointment.id, 'Anulado', appointment.clientName)}
                                               disabled={appointment.status === 'Anulado'}
                                             >
@@ -572,7 +584,7 @@ export default function AppointmentsPage() {
                                             </DropdownMenuItem>
                                           </DropdownMenuContent>
                                         </DropdownMenu>
-                                        
+
                                         <div className="flex space-x-1">
                                           <Button
                                             variant="outline"
@@ -672,7 +684,7 @@ export default function AppointmentsPage() {
                                       </p>
                                       {getStatusBadge(appointment.status)}
                                     </div>
-                                    
+
                                     {/* PROFESIONAL MÁS DESTACADO */}
                                     <div className="flex items-center space-x-1 mb-1">
                                       <User className="h-5 w-5 text-blue-600" />
@@ -680,7 +692,7 @@ export default function AppointmentsPage() {
                                         {appointment.professional?.name || 'Profesional eliminado'}
                                       </p>
                                     </div>
-                                    
+
                                     {/* Tratamientos */}
                                     <div className="flex items-center space-x-1 mb-1">
                                       <Briefcase className="h-4 w-4 text-muted-foreground" />
@@ -694,7 +706,7 @@ export default function AppointmentsPage() {
                                         </p>
                                       )}
                                     </div>
-                                    
+
                                     {(appointment.totalPrice || appointment.price) && (
                                       <Badge variant="secondary" className="text-xs mt-1">
                                         ${(appointment.totalPrice || appointment.price).toLocaleString()}
@@ -702,7 +714,7 @@ export default function AppointmentsPage() {
                                     )}
                                   </div>
                                 </div>
-                                
+
                                 <div className="flex flex-col space-y-1 flex-shrink-0">
                                   {/* Cambio de estado */}
                                   <DropdownMenu>
@@ -712,19 +724,19 @@ export default function AppointmentsPage() {
                                       </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
-                                      <DropdownMenuItem 
+                                      <DropdownMenuItem
                                         onClick={() => handleChangeStatus(appointment.id, 'Programado', appointment.clientName)}
                                         disabled={appointment.status === 'Programado'}
                                       >
                                         Programado
                                       </DropdownMenuItem>
-                                      <DropdownMenuItem 
+                                      <DropdownMenuItem
                                         onClick={() => handleChangeStatus(appointment.id, 'Completado', appointment.clientName)}
                                         disabled={appointment.status === 'Completado'}
                                       >
                                         Completado
                                       </DropdownMenuItem>
-                                      <DropdownMenuItem 
+                                      <DropdownMenuItem
                                         onClick={() => handleChangeStatus(appointment.id, 'Anulado', appointment.clientName)}
                                         disabled={appointment.status === 'Anulado'}
                                       >
@@ -732,7 +744,7 @@ export default function AppointmentsPage() {
                                       </DropdownMenuItem>
                                     </DropdownMenuContent>
                                   </DropdownMenu>
-                                  
+
                                   <div className="flex space-x-1">
                                     <Button
                                       variant="outline"

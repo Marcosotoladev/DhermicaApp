@@ -67,13 +67,11 @@ const optimizationUtils = {
   async withCache(key, queryFn, ttl) {
     const cached = cache.get(key)
     if (cached) {
-      console.log(`Cache hit: ${key}`)
       return cached
     }
 
     const result = await queryFn()
     cache.set(key, result, ttl)
-    console.log(`Cache miss: ${key}`)
     return result
   },
 

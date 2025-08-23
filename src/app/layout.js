@@ -15,7 +15,7 @@ export const metadata = {
   creator: 'Dhermica',
   publisher: 'Dhermica',
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
-  
+
   // PWA Metadata básica
   applicationName: 'Dhermica Estética',
   appleWebApp: {
@@ -23,7 +23,7 @@ export const metadata = {
     statusBarStyle: 'default',
     title: 'Dhermica',
   },
-  
+
   // Open Graph
   openGraph: {
     type: 'website',
@@ -32,10 +32,10 @@ export const metadata = {
     title: 'DHérmica Estética - Gestión de Citas',
     description: 'Sistema profesional para la gestión de citas y tratamientos estéticos',
   },
-  
+
   // Manifest y PWA
   manifest: '/manifest.json',
-  
+
   // Iconos básicos
   icons: {
     icon: [
@@ -46,7 +46,7 @@ export const metadata = {
       { url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' }
     ],
   },
-  
+
   // Otros
   category: 'business',
 }
@@ -73,10 +73,10 @@ export default function RootLayout({ children }) {
             }
           `
         }} />
-        
+
         {/* Preconnect básico */}
         <link rel="preconnect" href="https://firestore.googleapis.com" />
-        
+
         {/* PWA Meta Tags básicos */}
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -84,7 +84,7 @@ export default function RootLayout({ children }) {
         <meta name="apple-mobile-web-app-title" content="Dhermica" />
         <meta name="application-name" content="Dhermica" />
         <meta name="theme-color" content="#484450" />
-        
+
         {/* Structured Data básico */}
         <script
           type="application/ld+json"
@@ -111,19 +111,31 @@ export default function RootLayout({ children }) {
           <main className="min-h-screen bg-background">
             {children}
           </main>
-          
+
           {/* Toaster para notificaciones */}
-          <Toaster 
+          <Toaster
             position="top-right"
             toastOptions={{
-              duration: 4000,
-              style: {
-                background: 'hsl(var(--background))',
-                color: 'hsl(var(--foreground))',
-                border: '1px solid hsl(var(--border))'
-              }
+              duration: 3000,
+              className: "shadow-md border",
+              style: { opacity: 1 },
+              success: {
+                className: "bg-accent text-accent-foreground border-accent",
+              },
+              error: {
+                className: "bg-destructive text-card-foreground border-destructive",
+              },
+              info: {
+                className: "bg-secondary text-secondary-foreground border-secondary",
+              },
+              warning: {
+                className: "bg-warning text-card-foreground border-warning",
+              },
             }}
           />
+
+
+
         </AuthProvider>
 
         {/* Service Worker registration simple */}

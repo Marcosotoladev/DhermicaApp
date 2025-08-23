@@ -257,7 +257,7 @@ export default function ProfessionalsPage() {
               </Button>
               <div className="min-w-0 flex-1">
                 <h1 className="text-xl font-bold text-foreground truncate">
-                  Profesionales 👨‍⚕️
+                  Profesionales 
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   {filteredProfessionals.length} de {professionals.length} profesionales

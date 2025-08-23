@@ -10,7 +10,7 @@ find . -type f \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx"
 ./package-lock.json
 ./public/manifest.json
 ./public/sw.js
-./public/workbox-cb477421.js
+./public/workbox-f52fd911.js
 ./README.md
 ./src/app/(auth)/login/page.js
 ./src/app/(auth)/register/page.js
@@ -31,9 +31,10 @@ find . -type f \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx"
 ./src/app/admin/treatments/editar/[id]/page.js
 ./src/app/admin/treatments/new/page.js
 ./src/app/admin/treatments/page.js
+./src/app/client/appointments/[id]/page.js
 ./src/app/client/appointments/page.js
 ./src/app/client/dashboard/page.js
-./src/app/client/history/page.js
+./src/app/client/professionals/page.js
 ./src/app/client/profile/page.js
 ./src/app/globals.css
 ./src/app/layout.js

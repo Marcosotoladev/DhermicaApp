@@ -288,7 +288,7 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-between mb-3">
             <div>
               <h1 className="text-xl lg:text-3xl font-bold text-foreground">
-                Panel Administrativo 👨‍⚕️
+                Panel Administrativo
               </h1>
               <p className="text-sm lg:text-base text-muted-foreground">
                 {formatDate(new Date(), 'EEEE d \'de\' MMMM')} • {currentTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
