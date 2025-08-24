@@ -4,6 +4,7 @@ find . -type f \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx"
   ! -path "./.git/*" \
   | sort > estructura.txt
 
+./.vscode/settings.json
 ./components.json
 ./jsconfig.json
 ./package.json
@@ -15,6 +16,7 @@ find . -type f \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx"
 ./src/app/(auth)/login/page.js
 ./src/app/(auth)/register/page.js
 ./src/app/admin/appointments/[id]/page.js
+./src/app/admin/appointments/all/page.js
 ./src/app/admin/appointments/editar/[id]/page.js
 ./src/app/admin/appointments/new/page.js
 ./src/app/admin/appointments/page.js
@@ -34,11 +36,13 @@ find . -type f \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx"
 ./src/app/client/appointments/[id]/page.js
 ./src/app/client/appointments/page.js
 ./src/app/client/dashboard/page.js
+./src/app/client/professionals/[id]/page.js
 ./src/app/client/professionals/page.js
 ./src/app/client/profile/page.js
 ./src/app/globals.css
 ./src/app/layout.js
 ./src/app/page.js
+./src/components/admin/ScheduleExceptionsManager.js
 ./src/components/custom/AppointmentForm.js
 ./src/components/custom/ClientSearch.js
 ./src/components/custom/MedicalValidation.js
@@ -49,6 +53,7 @@ find . -type f \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx"
 ./src/components/forms/login-form.js
 ./src/components/forms/time-slot-picker.js
 ./src/components/providers/auth-provider.js
+./src/components/reviews/ProfessionalReviewsSystem.js
 ./src/components/ui/alert.jsx
 ./src/components/ui/avatar.jsx
 ./src/components/ui/badge.jsx
@@ -57,6 +62,7 @@ find . -type f \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx"
 ./src/components/ui/calendar.jsx
 ./src/components/ui/card.jsx
 ./src/components/ui/checkbox.jsx
+./src/components/ui/collapsible.jsx
 ./src/components/ui/dialog.jsx
 ./src/components/ui/dropdown-menu.jsx
 ./src/components/ui/form.jsx
@@ -70,9 +76,14 @@ find . -type f \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx"
 ./src/components/ui/skeleton.jsx
 ./src/components/ui/sonner.jsx
 ./src/components/ui/switch.jsx
+./src/components/ui/table.jsx
+./src/components/ui/tabs.jsx
 ./src/components/ui/textarea.jsx
+./src/constants/treatments.js
 ./src/hooks/use-performance.js
 ./src/lib/data-structures.js
+./src/lib/enhanced-data-structures.js
+./src/lib/enhanced-firebase-services.js
 ./src/lib/firebase.js
 ./src/lib/firebase-services.js
 ./src/lib/notification-service.js
